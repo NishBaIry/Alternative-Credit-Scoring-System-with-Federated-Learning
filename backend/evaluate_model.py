@@ -1,6 +1,7 @@
 """
 Model Accuracy Evaluation Script
 Evaluates a trained model's performance on validation dataset
+Generates comparison graphs and detailed improvement analysis
 """
 
 import os
@@ -11,9 +12,12 @@ import tensorflow as tf
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, 
-    roc_auc_score, confusion_matrix, classification_report
+    roc_auc_score, confusion_matrix, classification_report, roc_curve
 )
 import argparse
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -231,39 +235,223 @@ def evaluate_weights(base_model_path, weights_path, X, y):
         'confusion_matrix': cm.tolist()
     }
 
-def compare_models(model1_path, model2_path, X, y):
-    """Compare two models side by side"""
+def compare_models_with_visualization(model1_path, model2_path, X, y, model1_name="Old Model", model2_name="New Model"):
+    """Compare two models side by side with detailed visualizations"""
     print(f"\n{'='*80}")
-    print("MODEL COMPARISON")
+    print("MODEL COMPARISON WITH VISUALIZATION")
     print(f"{'='*80}")
     
-    # Evaluate both models
-    print("\n[1/2] Evaluating Model 1...")
-    metrics1 = evaluate_model(model1_path, X, y)
+    # Load models
+    print(f"\nLoading {model1_name}...")
+    model1 = tf.keras.models.load_model(model1_path, compile=False)
+    print(f"✓ {model1_name} loaded")
     
-    print(f"\n{'='*80}")
-    print("\n[2/2] Evaluating Model 2...")
-    metrics2 = evaluate_model(model2_path, X, y)
+    print(f"\nLoading {model2_name}...")
+    model2 = tf.keras.models.load_model(model2_path, compile=False)
+    print(f"✓ {model2_name} loaded")
     
-    # Compare
+    # Make predictions
+    print("\nMaking predictions...")
+    y_pred_proba1 = model1.predict(X, verbose=0)
+    y_pred1 = (y_pred_proba1 > 0.5).astype(int).flatten()
+    
+    y_pred_proba2 = model2.predict(X, verbose=0)
+    y_pred2 = (y_pred_proba2 > 0.5).astype(int).flatten()
+    
+    # Calculate metrics for both models
+    metrics1 = {
+        'accuracy': accuracy_score(y, y_pred1),
+        'precision': precision_score(y, y_pred1, zero_division=0),
+        'recall': recall_score(y, y_pred1, zero_division=0),
+        'f1': f1_score(y, y_pred1, zero_division=0),
+        'auc': roc_auc_score(y, y_pred_proba1)
+    }
+    
+    metrics2 = {
+        'accuracy': accuracy_score(y, y_pred2),
+        'precision': precision_score(y, y_pred2, zero_division=0),
+        'recall': recall_score(y, y_pred2, zero_division=0),
+        'f1': f1_score(y, y_pred2, zero_division=0),
+        'auc': roc_auc_score(y, y_pred_proba2)
+    }
+    
+    cm1 = confusion_matrix(y, y_pred1)
+    cm2 = confusion_matrix(y, y_pred2)
+    
+    # Print comparison
     print(f"\n{'='*80}")
     print("COMPARISON SUMMARY")
     print(f"{'='*80}")
     
-    print(f"\nModel 1: {model1_path}")
-    print(f"Model 2: {model2_path}")
-    print(f"\n{'Metric':<12} {'Model 1':>10} {'Model 2':>10} {'Difference':>12} {'Winner':>10}")
-    print("-" * 58)
+    print(f"\n{model1_name}: {model1_path}")
+    print(f"{model2_name}: {model2_path}")
+    print(f"\n{'Metric':<12} {model1_name[:10]:>10} {model2_name[:10]:>10} {'Difference':>12} {'Improvement':>12}")
+    print("-" * 60)
     
-    metrics = ['accuracy', 'precision', 'recall', 'f1', 'auc']
-    for metric in metrics:
+    for metric in ['accuracy', 'precision', 'recall', 'f1', 'auc']:
         v1 = metrics1[metric]
         v2 = metrics2[metric]
         diff = v2 - v1
-        winner = "Model 2 ✓" if v2 > v1 else ("Model 1 ✓" if v1 > v2 else "Tie")
-        print(f"{metric.capitalize():<12} {v1:>10.4f} {v2:>10.4f} {diff:>+12.4f} {winner:>10}")
+        improvement = (diff / v1 * 100) if v1 > 0 else 0
+        symbol = "↑" if diff > 0 else ("↓" if diff < 0 else "→")
+        print(f"{metric.capitalize():<12} {v1:>10.4f} {v2:>10.4f} {diff:>+12.4f} {symbol} {improvement:>+10.2f}%")
     
-    print()
+    # Generate visualizations
+    print(f"\n{'='*80}")
+    print("GENERATING VISUALIZATIONS")
+    print(f"{'='*80}")
+    
+    # Set style
+    sns.set_style("whitegrid")
+    plt.rcParams['figure.figsize'] = (16, 12)
+    
+    # Create comprehensive comparison plot
+    fig = plt.figure(figsize=(18, 12))
+    
+    # 1. Metrics Comparison Bar Chart
+    ax1 = plt.subplot(2, 3, 1)
+    metrics_names = list(metrics1.keys())
+    x = np.arange(len(metrics_names))
+    width = 0.35
+    
+    bars1 = ax1.bar(x - width/2, [metrics1[m] for m in metrics_names], width, 
+                    label=model1_name, color='#3498db', alpha=0.8)
+    bars2 = ax1.bar(x + width/2, [metrics2[m] for m in metrics_names], width, 
+                    label=model2_name, color='#2ecc71', alpha=0.8)
+    
+    ax1.set_xlabel('Metrics', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Score', fontsize=12, fontweight='bold')
+    ax1.set_title('Performance Metrics Comparison', fontsize=14, fontweight='bold')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([m.capitalize() for m in metrics_names], rotation=45, ha='right')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax1.set_ylim([0, 1.1])
+    
+    # Add value labels on bars
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    # 2. Improvement Percentage Chart
+    ax2 = plt.subplot(2, 3, 2)
+    improvements = [(metrics2[m] - metrics1[m]) / metrics1[m] * 100 if metrics1[m] > 0 else 0 
+                    for m in metrics_names]
+    colors = ['#2ecc71' if x > 0 else '#e74c3c' for x in improvements]
+    bars = ax2.barh(metrics_names, improvements, color=colors, alpha=0.8)
+    ax2.set_xlabel('Improvement (%)', fontsize=12, fontweight='bold')
+    ax2.set_title('Relative Improvement', fontsize=14, fontweight='bold')
+    ax2.axvline(x=0, color='black', linestyle='-', linewidth=0.5)
+    ax2.grid(True, alpha=0.3, axis='x')
+    
+    # Add value labels
+    for i, (bar, val) in enumerate(zip(bars, improvements)):
+        ax2.text(val, i, f' {val:+.2f}%', va='center', fontsize=10, fontweight='bold')
+    
+    # 3. Confusion Matrix - Old Model
+    ax3 = plt.subplot(2, 3, 3)
+    sns.heatmap(cm1, annot=True, fmt='d', cmap='Blues', ax=ax3, 
+                xticklabels=['No Default', 'Default'],
+                yticklabels=['No Default', 'Default'])
+    ax3.set_title(f'{model1_name} - Confusion Matrix', fontsize=14, fontweight='bold')
+    ax3.set_ylabel('Actual', fontsize=12, fontweight='bold')
+    ax3.set_xlabel('Predicted', fontsize=12, fontweight='bold')
+    
+    # 4. Confusion Matrix - New Model
+    ax4 = plt.subplot(2, 3, 4)
+    sns.heatmap(cm2, annot=True, fmt='d', cmap='Greens', ax=ax4,
+                xticklabels=['No Default', 'Default'],
+                yticklabels=['No Default', 'Default'])
+    ax4.set_title(f'{model2_name} - Confusion Matrix', fontsize=14, fontweight='bold')
+    ax4.set_ylabel('Actual', fontsize=12, fontweight='bold')
+    ax4.set_xlabel('Predicted', fontsize=12, fontweight='bold')
+    
+    # 5. ROC Curve Comparison
+    ax5 = plt.subplot(2, 3, 5)
+    fpr1, tpr1, _ = roc_curve(y, y_pred_proba1)
+    fpr2, tpr2, _ = roc_curve(y, y_pred_proba2)
+    
+    ax5.plot(fpr1, tpr1, label=f'{model1_name} (AUC={metrics1["auc"]:.4f})', 
+            color='#3498db', linewidth=2)
+    ax5.plot(fpr2, tpr2, label=f'{model2_name} (AUC={metrics2["auc"]:.4f})', 
+            color='#2ecc71', linewidth=2)
+    ax5.plot([0, 1], [0, 1], 'k--', label='Random', alpha=0.3)
+    ax5.set_xlabel('False Positive Rate', fontsize=12, fontweight='bold')
+    ax5.set_ylabel('True Positive Rate', fontsize=12, fontweight='bold')
+    ax5.set_title('ROC Curve Comparison', fontsize=14, fontweight='bold')
+    ax5.legend(loc='lower right')
+    ax5.grid(True, alpha=0.3)
+    
+    # 6. Prediction Distribution
+    ax6 = plt.subplot(2, 3, 6)
+    ax6.hist(y_pred_proba1[y==0], bins=50, alpha=0.5, label=f'{model1_name} (No Default)', 
+            color='#3498db', density=True)
+    ax6.hist(y_pred_proba1[y==1], bins=50, alpha=0.5, label=f'{model1_name} (Default)', 
+            color='#e74c3c', density=True)
+    ax6.hist(y_pred_proba2[y==0], bins=50, alpha=0.5, label=f'{model2_name} (No Default)', 
+            color='#1abc9c', density=True, linestyle='--')
+    ax6.hist(y_pred_proba2[y==1], bins=50, alpha=0.5, label=f'{model2_name} (Default)', 
+            color='#e67e22', density=True, linestyle='--')
+    ax6.set_xlabel('Prediction Probability', fontsize=12, fontweight='bold')
+    ax6.set_ylabel('Density', fontsize=12, fontweight='bold')
+    ax6.set_title('Prediction Distribution', fontsize=14, fontweight='bold')
+    ax6.legend()
+    ax6.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    
+    # Save figure
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = f'model_comparison_{timestamp}.png'
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"\n✓ Visualization saved: {output_path}")
+    
+    # Display
+    plt.show()
+    
+    # Print detailed improvement analysis
+    print(f"\n{'='*80}")
+    print("DETAILED IMPROVEMENT ANALYSIS")
+    print(f"{'='*80}")
+    
+    print(f"\n📊 Overall Performance:")
+    acc_improvement = (metrics2['accuracy'] - metrics1['accuracy']) / metrics1['accuracy'] * 100
+    print(f"  • Accuracy improved by {acc_improvement:+.2f}%")
+    print(f"  • From {metrics1['accuracy']*100:.2f}% → {metrics2['accuracy']*100:.2f}%")
+    
+    print(f"\n🎯 Classification Quality:")
+    prec_improvement = (metrics2['precision'] - metrics1['precision']) / metrics1['precision'] * 100
+    rec_improvement = (metrics2['recall'] - metrics1['recall']) / metrics1['recall'] * 100
+    print(f"  • Precision improved by {prec_improvement:+.2f}%")
+    print(f"  • Recall improved by {rec_improvement:+.2f}%")
+    print(f"  • F1-Score improved by {((metrics2['f1'] - metrics1['f1']) / metrics1['f1'] * 100):+.2f}%")
+    
+    print(f"\n📈 Confusion Matrix Changes:")
+    tn1, fp1, fn1, tp1 = cm1.ravel()
+    tn2, fp2, fn2, tp2 = cm2.ravel()
+    print(f"  • True Positives: {tp1:,} → {tp2:,} ({tp2-tp1:+,})")
+    print(f"  • True Negatives: {tn1:,} → {tn2:,} ({tn2-tn1:+,})")
+    print(f"  • False Positives: {fp1:,} → {fp2:,} ({fp2-fp1:+,})")
+    print(f"  • False Negatives: {fn1:,} → {fn2:,} ({fn2-fn1:+,})")
+    
+    print(f"\n💡 Key Insights:")
+    if metrics2['accuracy'] > metrics1['accuracy']:
+        print(f"  ✅ The new model shows improvement across metrics")
+    else:
+        print(f"  ⚠️  The new model shows degradation - consider reverting")
+    
+    if abs(acc_improvement) < 1:
+        print(f"  ℹ️  Improvement is marginal (<1%) - model is converging")
+    elif acc_improvement > 5:
+        print(f"  🚀 Significant improvement (>5%) - excellent progress!")
+    
+    return metrics1, metrics2
+
+def compare_models(model1_path, model2_path, X, y):
+    """Wrapper for backward compatibility"""
+    return compare_models_with_visualization(model1_path, model2_path, X, y)
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate model accuracy on validation dataset')

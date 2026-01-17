@@ -31,9 +31,9 @@ async def root():
         "version": "1.0.0"
     }
 
-# TODO: Import and include routers
-# from app.api import auth, client_routes, staff_routes, fl_routes
-# app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-# app.include_router(client_routes.router, prefix="/api/client", tags=["client"])
-# app.include_router(staff_routes.router, prefix="/api/staff", tags=["staff"])
-# app.include_router(fl_routes.router, prefix="/api/fl", tags=["federated-learning"])
+# Import and include routers
+from app.api import auth, client_routes, staff_routes, fl_routes
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(client_routes.router, prefix="/api/client", tags=["client"])
+app.include_router(staff_routes.router, prefix="/api/staff", tags=["staff"])
+app.include_router(fl_routes.router, prefix="/api/fl", tags=["federated-learning"])

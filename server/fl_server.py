@@ -388,14 +388,21 @@ def download_global_model():
     print_info(f"Format: {response_format}")
     
     try:
-        # Check for H5 model
-        if not os.path.exists(GLOBAL_MODEL_PATH):
+        # Check for aggregated model first, fall back to base model
+        model_to_send = None
+        if os.path.exists(GLOBAL_MODEL_PATH):
+            model_to_send = GLOBAL_MODEL_PATH
+            print_info("Sending aggregated global model")
+        elif os.path.exists(BASE_MODEL_PATH):
+            model_to_send = BASE_MODEL_PATH
+            print_info("Sending base model (no aggregation yet)")
+        else:
             print_warning("No global model available yet")
             return jsonify({'error': 'No global model available'}), 404
         
         if response_format == 'bytes':
             # Return raw bytes
-            with open(GLOBAL_MODEL_PATH, 'rb') as f:
+            with open(model_to_send, 'rb') as f:
                 model_bytes = f.read()
             
             print_success("H5 model sent (bytes)")
@@ -407,7 +414,7 @@ def download_global_model():
         else:
             # Default file download (H5)
             print_success("H5 model sent (file)")
-            return send_file(GLOBAL_MODEL_PATH, as_attachment=True, download_name='global_model.h5')
+            return send_file(model_to_send, as_attachment=True, download_name='global_model.h5')
     
     except Exception as e:
         print_error(f"Download error: {e}")
@@ -428,6 +435,42 @@ def trigger_aggregation():
         return jsonify({'message': 'Aggregation successful', 'round': fed_avg.current_round}), 200
     else:
         return jsonify({'error': 'Aggregation failed'}), 500
+
+@app.route('/api/model_version', methods=['GET'])
+def get_model_version():
+    """
+    Get current global model version info for polling.
+    Banks can poll this endpoint to check if a new model is available.
+    """
+    client_id = request.args.get('client_id', 'unknown')
+    client_current_round = request.args.get('current_round', 0, type=int)
+    
+    current_round = server_state['current_round']
+    has_new_model = current_round > client_current_round
+    
+    model_size = 0
+    model_timestamp = None
+    model_available = False
+    
+    # Check aggregated model first, then base model
+    if os.path.exists(GLOBAL_MODEL_PATH):
+        model_size = os.path.getsize(GLOBAL_MODEL_PATH) / (1024 * 1024)
+        model_timestamp = datetime.fromtimestamp(os.path.getmtime(GLOBAL_MODEL_PATH)).isoformat()
+        model_available = True
+    elif os.path.exists(BASE_MODEL_PATH):
+        model_size = os.path.getsize(BASE_MODEL_PATH) / (1024 * 1024)
+        model_timestamp = datetime.fromtimestamp(os.path.getmtime(BASE_MODEL_PATH)).isoformat()
+        model_available = True
+    
+    return jsonify({
+        'current_round': current_round,
+        'has_new_model': has_new_model,
+        'model_available': model_available,
+        'model_size_mb': round(model_size, 2),
+        'model_timestamp': model_timestamp,
+        'total_aggregations': server_state['total_aggregations'],
+        'pending_banks': list(server_state['pending_updates'].keys())
+    })
 
 # ============================================
 # AGGREGATION LOGIC

@@ -4,14 +4,19 @@
 # POST /send-update: sends model weights to FL server
 # GET /download-global: downloads latest global model from FL server
 # GET /fl-status: shows current FL round and server status
+# GET /check-model-update: poll for new model versions
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 import subprocess
 import os
 import sys
+import shutil
 import requests
 from dotenv import load_dotenv
+from typing import Optional
+import asyncio
+from datetime import datetime
 
 load_dotenv('.env.fl')
 
@@ -20,10 +25,21 @@ router = APIRouter()
 # Configuration
 FL_SERVER_URL = os.getenv('FL_SERVER_URL', 'http://localhost:5000')
 FL_TRAINING_SCRIPT = 'app/services/fl_client_training.py'
+BANK_ID = os.getenv('BANK_ID', 'bank_a')
+MODELS_FOLDER = 'models'
+ACTIVE_MODEL_PATH = os.path.join(MODELS_FOLDER, 'active_model.h5')
+GLOBAL_MODEL_PATH = os.path.join(MODELS_FOLDER, 'global_model.h5')
+
+# Track current model round locally
+local_model_state = {
+    'current_round': 0,
+    'last_check': None,
+    'training_in_progress': False
+}
 
 class FLTrainRequest(BaseModel):
     """Request to trigger FL training"""
-    bank_id: str = "bank_a"
+    bank_id: str = BANK_ID
     epochs: int = 10
     batch_size: int = 256
     learning_rate: float = 0.001
@@ -161,17 +177,151 @@ async def send_fl_update(bank_id: str):
         "bank_id": bank_id
     }
 
-@router.get("/receive-global")
-async def receive_global_model(bank_id: str):
+@router.get("/check-model-update")
+async def check_model_update():
     """
-    Legacy endpoint - use /download-global instead.
-    Receive and apply the latest global model from FL server.
+    Check if a new global model is available from FL server.
+    Frontend should poll this endpoint to detect new models.
     """
+    try:
+        response = requests.get(
+            f"{FL_SERVER_URL}/api/model_version",
+            params={
+                'client_id': BANK_ID,
+                'current_round': local_model_state['current_round']
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            local_model_state['last_check'] = datetime.now().isoformat()
+            
+            return {
+                "status": "success",
+                "server_round": data.get('current_round', 0),
+                "local_round": local_model_state['current_round'],
+                "has_new_model": data.get('has_new_model', False),
+                "model_available": data.get('model_available', False),
+                "model_size_mb": data.get('model_size_mb', 0),
+                "model_timestamp": data.get('model_timestamp'),
+                "pending_banks": data.get('pending_banks', []),
+                "last_check": local_model_state['last_check']
+            }
+        else:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail="Failed to check model version"
+            )
+    
+    except requests.RequestException as e:
+        raise HTTPException(status_code=503, detail=f"FL server unavailable: {str(e)}")
+
+@router.post("/download-and-activate")
+async def download_and_activate_model():
+    """
+    Download the latest global model from FL server and activate it.
+    This replaces the current active model with the new aggregated one.
+    """
+    try:
+        # First check if new model available
+        version_response = requests.get(
+            f"{FL_SERVER_URL}/api/model_version",
+            params={'client_id': BANK_ID, 'current_round': local_model_state['current_round']},
+            timeout=10
+        )
+        
+        if version_response.status_code != 200:
+            raise HTTPException(status_code=503, detail="Cannot check model version")
+        
+        version_data = version_response.json()
+        server_round = version_data.get('current_round', 0)
+        
+        # Download the model
+        response = requests.get(
+            f"{FL_SERVER_URL}/api/download_global_model",
+            params={'client_id': BANK_ID, 'format': 'bytes'},
+            timeout=120
+        )
+        
+        if response.status_code == 200:
+            os.makedirs(MODELS_FOLDER, exist_ok=True)
+            
+            # Save as timestamped version
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            versioned_path = os.path.join(MODELS_FOLDER, f"global_model_round_{server_round}_{timestamp}.h5")
+            
+            with open(versioned_path, 'wb') as f:
+                f.write(response.content)
+            
+            # Copy to active model path (this is what the scoring service uses)
+            shutil.copy(versioned_path, ACTIVE_MODEL_PATH)
+            
+            # Also update the global_model.h5 for next training round
+            shutil.copy(versioned_path, GLOBAL_MODEL_PATH)
+            
+            # Update local state
+            local_model_state['current_round'] = server_round
+            
+            return {
+                "status": "success",
+                "message": "New model downloaded and activated",
+                "round": server_round,
+                "model_path": ACTIVE_MODEL_PATH,
+                "versioned_path": versioned_path,
+                "size_mb": len(response.content) / (1024 * 1024)
+            }
+        else:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Failed to download model: {response.text}"
+            )
+    
+    except requests.RequestException as e:
+        raise HTTPException(status_code=503, detail=f"FL server unavailable: {str(e)}")
+
+@router.get("/local-model-info")
+async def get_local_model_info():
+    """
+    Get information about the local active model.
+    """
+    active_exists = os.path.exists(ACTIVE_MODEL_PATH)
+    global_exists = os.path.exists(GLOBAL_MODEL_PATH)
+    
+    active_info = None
+    if active_exists:
+        stat = os.stat(ACTIVE_MODEL_PATH)
+        active_info = {
+            "path": ACTIVE_MODEL_PATH,
+            "size_mb": stat.st_size / (1024 * 1024),
+            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+        }
+    
+    global_info = None
+    if global_exists:
+        stat = os.stat(GLOBAL_MODEL_PATH)
+        global_info = {
+            "path": GLOBAL_MODEL_PATH,
+            "size_mb": stat.st_size / (1024 * 1024),
+            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+        }
+    
     return {
-        "status": "deprecated",
-        "message": "Use /download-global endpoint instead",
-        "bank_id": bank_id
+        "status": "success",
+        "local_round": local_model_state['current_round'],
+        "training_in_progress": local_model_state['training_in_progress'],
+        "last_server_check": local_model_state['last_check'],
+        "active_model": active_info,
+        "global_model": global_info
     }
 
-        "last_update": "1 hour ago"
+@router.get("/training-status")
+async def get_training_status():
+    """
+    Get current training status.
+    """
+    return {
+        "training_in_progress": local_model_state['training_in_progress'],
+        "local_round": local_model_state['current_round'],
+        "bank_id": BANK_ID
     }
