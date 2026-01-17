@@ -1,0 +1,15 @@
+{
+  "name": "cashflow-monorepo",
+  "version": "1.0.0",
+  "description": "Alternative Credit Scoring Platform with Federated Learning",
+  "scripts": {
+    "frontend": "cd frontend && npm run dev",
+    "backend": "cd backend && uvicorn app.main:app --reload",
+    "install-all": "cd frontend && npm install && cd ../backend && pip install -r requirements.txt",
+    "test-frontend": "cd frontend && npm test",
+    "test-backend": "cd backend && pytest app/tests/"
+  },
+  "keywords": ["credit-scoring", "federated-learning", "ai-for-good", "fintech"],
+  "author": "",
+  "license": "MIT"
+}
