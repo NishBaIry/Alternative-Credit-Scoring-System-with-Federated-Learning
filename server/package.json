@@ -1,0 +1,23 @@
+{
+  "name": "fl-server",
+  "version": "1.0.0",
+  "description": "Federated Learning Server for Credit Scoring - FedAvg Aggregation",
+  "main": "fl_server.py",
+  "scripts": {
+    "start": "python fl_server.py",
+    "setup": "../setup_fl.sh"
+  },
+  "keywords": [
+    "federated-learning",
+    "fedavg",
+    "credit-scoring",
+    "privacy-preserving",
+    "machine-learning"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VTG56/cashflow"
+  }
+}
