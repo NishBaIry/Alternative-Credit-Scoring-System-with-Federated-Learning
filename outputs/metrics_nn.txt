@@ -1,0 +1,22 @@
+================================================================================
+NEURAL NETWORK MODEL EVALUATION RESULTS
+================================================================================
+
+PERFORMANCE METRICS:
+  Accuracy:  0.8961 (89.61%)
+  Precision: 0.9295 (92.95%)
+  Recall:    0.9500 (95.00%)
+  F1-Score:  0.9396
+  ROC-AUC:   0.8966
+
+CONFUSION MATRIX:
+  True Negatives (TN):   1,242
+  False Positives (FP):    875
+  False Negatives (FN):    608
+  True Positives (TP):  11,543
+
+LOSS METRICS:
+  Training Loss:   0.0486
+  Validation Loss: 0.4069
+
+================================================================================
