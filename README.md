@@ -15,16 +15,28 @@ CashFlow is an **AI for Social Good** project that provides alternative credit s
 
 ```
 cashflow/
-├── frontend/          # React + Vite + TailwindCSS UI
+├── frontend-client/   # React UI - Client Portal (Port 3000)
 │   ├── src/
-│   │   ├── pages/     # Client & Staff pages
+│   │   ├── pages/     # Client pages only
 │   │   ├── components/ # Reusable UI components
 │   │   ├── hooks/     # Custom React hooks
 │   │   ├── lib/       # API client & utilities
 │   │   └── context/   # Global state management
-│   └── ...
+│   └── .env           # Client config
 │
-├── backend/           # FastAPI Python backend
+├── frontend-bank-a/   # React UI - Bank A Staff Portal (Port 3001)
+│   ├── src/
+│   │   ├── pages/     # Staff pages only
+│   │   └── ...
+│   └── .env           # Bank A config (hardcoded bank_id)
+│
+├── frontend-bank-b/   # React UI - Bank B Staff Portal (Port 3002)
+│   ├── src/
+│   │   ├── pages/     # Staff pages only
+│   │   └── ...
+│   └── .env           # Bank B config (hardcoded bank_id)
+│
+├── backend/           # FastAPI Python backend (Port 8000)
 │   ├── app/
 │   │   ├── api/       # REST API endpoints
 │   │   ├── core/      # Security, DB, schemas
@@ -33,33 +45,74 @@ cashflow/
 │   │   └── tests/     # Unit tests
 │   └── requirements.txt
 │
-└── README.md
+└── package.json       # Monorepo scripts
 ```
 
 ## 🚀 Quick Start
 
-### Frontend Setup
+### Install All Dependencies
 
 ```bash
-cd frontend
-npm install
+npm run install-all
+```
+
+### Run All Services (Federated Learning Demo)
+
+```bash
 npm run dev
 ```
 
-Frontend runs on: http://localhost:3000
+This starts all 4 services:
+- **Client Portal** → http://localhost:3000
+- **Bank A Staff** → http://localhost:3001  
+- **Bank B Staff** → http://localhost:3002
+- **Backend API** → http://localhost:8000 (docs: /docs)
 
-### Backend Setup
+### Run Individual Services
 
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+# Client Portal only
+npm run client
+
+# Bank A Staff Portal only
+npm run bank-a
+
+# Bank B Staff Portal only
+npm run bank-b
+
+# Backend only
+npm run backend
 ```
 
-Backend runs on: http://localhost:8000
-API docs: http://localhost:8000/docs
+## 📱 Architecture
+
+### 3-Frontend Design for FL Demo
+
+This project uses **3 separate frontend applications** to demonstrate federated learning effectively:
+
+1. **frontend-client** (Port 3000)
+   - Multi-tenant client portal
+   - Bank selection flow
+   - Client login and dashboard
+   - View credit scores and recommendations
+
+2. **frontend-bank-a** (Port 3001)
+   - Bank A staff portal (single-tenant)
+   - Hardcoded `bank_id=bank_a`
+   - Staff dashboard and customer management
+   - Local model training for Bank A data
+
+3. **frontend-bank-b** (Port 3002)
+   - Bank B staff portal (single-tenant)
+   - Hardcoded `bank_id=bank_b`
+   - Staff dashboard and customer management
+   - Local model training for Bank B data
+
+**Why 3 Frontends?**
+- Demonstrates FL collaboration visually (side-by-side browsers)
+- Clean separation of concerns (client vs bank portals)
+- Proper bank data isolation (no accidental cross-bank access)
+- Realistic multi-organization deployment scenario
 
 ## 📱 User Interfaces
 
