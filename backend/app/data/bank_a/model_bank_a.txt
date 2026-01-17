@@ -1,3 +1,0 @@
-# Placeholder for Bank A LightGBM model
-# Model will be saved here after training
-# Format: LightGBM booster model file
