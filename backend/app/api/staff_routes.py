@@ -10,8 +10,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
+import pandas as pd
+import os
 
 router = APIRouter()
+
+CUSTOMERS_CSV = 'data/customers.csv'
 
 @router.get("/customers")
 async def list_customers(skip: int = 0, limit: int = 100, risk_band: Optional[str] = None):
@@ -19,36 +23,58 @@ async def list_customers(skip: int = 0, limit: int = 100, risk_band: Optional[st
     List all customers for the bank.
     Supports pagination and filtering.
     """
-    # TODO: Implement customer listing
-    return {
-        "total": 1234,
-        "customers": [
-            {
-                "id": "C001",
-                "name": "John Doe",
-                "score": 742,
-                "risk_band": "Low",
-                "age": 28,
-                "region": "Mumbai"
-            }
-        ]
-    }
+    try:
+        if not os.path.exists(CUSTOMERS_CSV):
+            return {"total": 0, "customers": []}
+        
+        df = pd.read_csv(CUSTOMERS_CSV)
+        
+        # Remove password column for security
+        if 'password' in df.columns:
+            df = df.drop(columns=['password'])
+        
+        # Apply pagination
+        total = len(df)
+        paginated_df = df.iloc[skip:skip+limit]
+        
+        # Convert to list of dicts
+        customers = paginated_df.to_dict('records')
+        
+        return {
+            "total": total,
+            "customers": customers
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load customers: {str(e)}")
 
 @router.get("/customers/{customer_id}")
 async def get_customer_detail(customer_id: str):
     """
     Get detailed information for a specific customer.
     """
-    # TODO: Implement customer detail retrieval
-    return {
-        "id": customer_id,
-        "name": "John Doe",
-        "score": 742,
-        "risk_band": "Low",
-        "profile": {},
-        "financial_metrics": {},
-        "score_factors": []
-    }
+    try:
+        if not os.path.exists(CUSTOMERS_CSV):
+            raise HTTPException(status_code=404, detail="Customers database not found")
+        
+        df = pd.read_csv(CUSTOMERS_CSV)
+        customer = df[df['customer_id'] == customer_id]
+        
+        if customer.empty:
+            raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
+        
+        # Remove password for security
+        customer_data = customer.iloc[0].to_dict()
+        if 'password' in customer_data:
+            del customer_data['password']
+        
+        return {
+            "status": "success",
+            "customer": customer_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get customer: {str(e)}")
 
 @router.patch("/customers/{customer_id}")
 async def update_customer(customer_id: str, update_data: dict):

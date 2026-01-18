@@ -33,12 +33,23 @@ class FedAvg:
     def load_global_model(self):
         """Load the global model"""
         try:
-            self.global_model = tf.keras.models.load_model(self.base_model_path, compile=False)
+            # Try loading with compile=False and safe_mode=False for compatibility
+            self.global_model = tf.keras.models.load_model(
+                self.base_model_path, 
+                compile=False,
+                safe_mode=False
+            )
             logger.info("Global model loaded successfully")
             return True
         except Exception as e:
             logger.error(f"Failed to load global model: {e}")
-            return False
+            # Try loading weights only if model file fails
+            try:
+                logger.info("Attempting to load model architecture and weights separately...")
+                # This is a fallback - you may need to recreate the model architecture
+                return False
+            except:
+                return False
     
     def aggregate_weights(
         self, 

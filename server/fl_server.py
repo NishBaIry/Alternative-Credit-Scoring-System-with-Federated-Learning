@@ -139,7 +139,7 @@ def load_weights_from_file(filepath):
     """Load model weights from .h5 or .npz file"""
     try:
         if filepath.endswith('.h5'):
-            model = tf.keras.models.load_model(filepath, compile=False)
+            model = tf.keras.models.load_model(filepath, compile=False, safe_mode=False)
             return model.get_weights()
         elif filepath.endswith('.npz'):
             data = np.load(filepath, allow_pickle=True)
@@ -533,37 +533,39 @@ def perform_aggregation():
         
         print_success("Aggregation computed successfully")
         
-        # Validation check
+        # Validation check (using AUC as primary metric)
         should_replace = True
-        old_accuracy = None
-        new_accuracy = None
+        old_auc = None
+        new_auc = None
+        old_metrics = None
+        new_metrics = None
         
         if VALIDATE_BEFORE_REPLACE and os.path.exists(VALIDATION_DATASET_PATH):
-            print_subheader("Model Validation")
+            print_subheader("Model Validation (AUC-Based)")
             
             # Evaluate old model (if exists)
             if os.path.exists(GLOBAL_MODEL_PATH):
                 print_info("Evaluating OLD model...", indent=1)
-                old_model = tf.keras.models.load_model(GLOBAL_MODEL_PATH, compile=False)
+                old_model = tf.keras.models.load_model(GLOBAL_MODEL_PATH, compile=False, safe_mode=False)
                 old_metrics = evaluate_model_accuracy(old_model, VALIDATION_DATASET_PATH)
                 if old_metrics:
-                    old_accuracy = old_metrics['accuracy']
-                    print_info(f"Old Accuracy: {old_accuracy:.4f}", indent=2)
+                    old_auc = old_metrics['auc']
+                    print_info(f"Old AUC: {old_auc:.4f} | Accuracy: {old_metrics['accuracy']:.4f}", indent=2)
             
             # Evaluate new aggregated model
             print_info("Evaluating NEW model...", indent=1)
             new_metrics = evaluate_model_accuracy(fed_avg.global_model, VALIDATION_DATASET_PATH)
             if new_metrics:
-                new_accuracy = new_metrics['accuracy']
-                print_info(f"New Accuracy: {new_accuracy:.4f}", indent=2)
+                new_auc = new_metrics['auc']
+                print_info(f"New AUC: {new_auc:.4f} | Accuracy: {new_metrics['accuracy']:.4f}", indent=2)
                 
-                # Compare accuracies
-                if old_accuracy is not None:
-                    if new_accuracy >= old_accuracy:
-                        print_success(f"Improvement: +{(new_accuracy - old_accuracy):.4f}")
+                # Compare AUC scores (primary metric for credit scoring)
+                if old_auc is not None:
+                    if new_auc >= old_auc:
+                        print_success(f"AUC Improvement: +{(new_auc - old_auc):.4f}")
                         should_replace = True
                     else:
-                        print_warning(f"Degradation: {(new_accuracy - old_accuracy):.4f}")
+                        print_warning(f"AUC Degradation: {(new_auc - old_auc):.4f}")
                         should_replace = False
                 else:
                     should_replace = True
@@ -618,8 +620,10 @@ def perform_aggregation():
             'model_path': round_model_path if should_replace else 'not_saved',
             'validation': {
                 'enabled': VALIDATE_BEFORE_REPLACE,
-                'old_accuracy': old_accuracy,
-                'new_accuracy': new_accuracy,
+                'old_auc': old_auc,
+                'new_auc': new_auc,
+                'old_accuracy': old_metrics['accuracy'] if old_metrics else None,
+                'new_accuracy': new_metrics['accuracy'] if new_metrics else None,
                 'replaced': should_replace
             }
         }

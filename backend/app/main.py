@@ -32,8 +32,23 @@ async def root():
     }
 
 # Import and include routers
-from app.api import auth, client_routes, staff_routes, fl_routes
+from app.api import auth, client_routes, staff_routes, fl_routes, scoring
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(client_routes.router, prefix="/api/client", tags=["client"])
 app.include_router(staff_routes.router, prefix="/api/staff", tags=["staff"])
 app.include_router(fl_routes.router, prefix="/api/fl", tags=["federated-learning"])
+app.include_router(scoring.router, prefix="/api", tags=["scoring"])
+
+# Auto-start FL model polling service on startup
+@app.on_event("startup")
+async def startup_event():
+    """Auto-start background services on application startup"""
+    from app.services.fl_model_poller import start_polling
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        start_polling()
+        logger.info("✅ FL Model Polling Service auto-started")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not start FL polling service: {e}")

@@ -5,6 +5,9 @@
 # GET /download-global: downloads latest global model from FL server
 # GET /fl-status: shows current FL round and server status
 # GET /check-model-update: poll for new model versions
+# POST /start-polling: start background model polling
+# POST /stop-polling: stop background model polling
+# GET /polling-status: get polling service status
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
@@ -17,6 +20,7 @@ from dotenv import load_dotenv
 from typing import Optional
 import asyncio
 from datetime import datetime
+from app.services.fl_model_poller import start_polling, stop_polling, get_polling_status
 
 load_dotenv('.env.fl')
 
@@ -82,12 +86,16 @@ async def trigger_fl_training(request: FLTrainRequest, background_tasks: Backgro
         )
         
         if result.returncode == 0:
+            # Training successful - start polling for new model
+            start_polling()
+            
             return {
                 "status": "success",
-                "message": "FL training completed and weights uploaded",
+                "message": "FL training completed and weights uploaded. Polling for new model started.",
                 "bank_id": request.bank_id,
                 "epochs": request.epochs,
-                "output": result.stdout[-500:] if len(result.stdout) > 500 else result.stdout
+                "output": result.stdout[-500:] if len(result.stdout) > 500 else result.stdout,
+                "polling_started": True
             }
         else:
             raise HTTPException(
@@ -325,3 +333,143 @@ async def get_training_status():
         "local_round": local_model_state['current_round'],
         "bank_id": BANK_ID
     }
+
+@router.post("/start-polling")
+async def start_model_polling():
+    """
+    Start background polling for new FL models.
+    Will automatically download and activate new models when available.
+    """
+    try:
+        start_polling()
+        status = get_polling_status()
+        return {
+            "status": "success",
+            "message": "Polling service started",
+            "polling_status": status
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start polling: {str(e)}")
+
+@router.post("/stop-polling")
+async def stop_model_polling():
+    """
+    Stop background polling for FL models.
+    """
+    try:
+        stop_polling()
+        return {
+            "status": "success",
+            "message": "Polling service stopped"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop polling: {str(e)}")
+
+@router.get("/polling-status")
+async def get_polling_service_status():
+    """
+    Get current status of the polling service.
+    """
+    try:
+        status = get_polling_status()
+        return {
+            "status": "success",
+            "polling": status
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get polling status: {str(e)}")
+
+@router.get("/dataset-stats")
+async def get_fl_dataset_statistics():
+    """
+    Get statistics about FL dataset (new data since last training round).
+    """
+    try:
+        from app.services.fl_data_collector import get_fl_dataset_stats
+        stats = get_fl_dataset_stats()
+        return {
+            "status": "success",
+            "fl_dataset": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get dataset stats: {str(e)}")
+
+@router.get("/list-models")
+async def list_available_models():
+    """
+    List all available FL models (base + round models).
+    """
+    try:
+        import glob
+        models = []
+        
+        # Find all round models
+        round_models = glob.glob(os.path.join(MODELS_FOLDER, "global_model_round_*.h5"))
+        for model_path in sorted(round_models):
+            filename = os.path.basename(model_path)
+            # Extract round number from filename: global_model_round_1.h5
+            round_num = filename.replace("global_model_round_", "").replace(".h5", "")
+            size_mb = os.path.getsize(model_path) / (1024 * 1024)
+            
+            models.append({
+                "id": f"round_{round_num}",
+                "name": f"Round {round_num}",
+                "round": int(round_num) if round_num.isdigit() else 0,
+                "path": filename,
+                "size_mb": round(size_mb, 2)
+            })
+        
+        # Check active model
+        active_model_name = "Base Model"
+        if os.path.exists(ACTIVE_MODEL_PATH):
+            # Check which round model is currently active
+            import filecmp
+            for model in models:
+                model_full_path = os.path.join(MODELS_FOLDER, model["path"])
+                if filecmp.cmp(ACTIVE_MODEL_PATH, model_full_path, shallow=False):
+                    active_model_name = model["name"]
+                    break
+        
+        return {
+            "status": "success",
+            "models": sorted(models, key=lambda x: x["round"]),
+            "active_model": active_model_name
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list models: {str(e)}")
+
+@router.post("/switch-model")
+async def switch_active_model(model_id: str):
+    """
+    Switch the active model to a specific round model.
+    """
+    try:
+        import shutil
+        
+        # Extract round number from model_id (e.g., "round_1" -> "1")
+        round_num = model_id.replace("round_", "")
+        model_filename = f"global_model_round_{round_num}.h5"
+        model_path = os.path.join(MODELS_FOLDER, model_filename)
+        
+        if not os.path.exists(model_path):
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_filename}")
+        
+        # Copy to active_model.h5
+        shutil.copy(model_path, ACTIVE_MODEL_PATH)
+        
+        # Reload scoring service
+        from app.services.nn_scoring_service import get_scoring_service
+        scoring_service = get_scoring_service()
+        scoring_service.reload_model()
+        
+        return {
+            "status": "success",
+            "message": f"Switched to Round {round_num} model",
+            "active_model": f"Round {round_num}"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to switch model: {str(e)}")
+
+

@@ -21,11 +21,30 @@ const StaffModelTraining = () => {
   const [localModelInfo, setLocalModelInfo] = useState(null);
   const [downloadingModel, setDownloadingModel] = useState(false);
   
+  // Model selection state
+  const [availableModels, setAvailableModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState('');
+  const [activeModelName, setActiveModelName] = useState('');
+  
   // Error state
   const [error, setError] = useState(null);
   
   // Refs for cleanup
   const pollIntervalRef = useRef(null);
+
+  // Fetch available models
+  const fetchAvailableModels = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/fl/list-models`);
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableModels(data.models || []);
+        setActiveModelName(data.active_model || 'Base Model');
+      }
+    } catch (err) {
+      console.error('Failed to fetch models:', err);
+    }
+  }, []);
 
   // Fetch FL status from server
   const fetchFLStatus = useCallback(async () => {
@@ -184,16 +203,37 @@ const StaffModelTraining = () => {
     await downloadAndActivateModel();
   };
 
+  // Switch model
+  const handleSwitchModel = async (modelId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/fl/switch-model?model_id=${modelId}`, {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setActiveModelName(data.active_model);
+        await fetchLocalModelInfo();
+        await fetchAvailableModels();
+        alert(`✅ Switched to ${data.active_model}`);
+      }
+    } catch (err) {
+      console.error('Failed to switch model:', err);
+      alert('Failed to switch model');
+    }
+  };
+
   // Initial data fetch
   useEffect(() => {
     fetchFLStatus();
     fetchLocalModelInfo();
+    fetchAvailableModels();
     
     // Cleanup on unmount
     return () => {
       stopPolling();
     };
-  }, [fetchFLStatus, fetchLocalModelInfo, stopPolling]);
+  }, [fetchFLStatus, fetchLocalModelInfo, fetchAvailableModels, stopPolling]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -301,6 +341,42 @@ const StaffModelTraining = () => {
               <p className="text-gray-500">Loading model info...</p>
             )}
           </div>
+
+          {/* Model Selector */}
+          {availableModels.length > 0 && (
+            <div className="card bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Switch Active Model</h2>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium mb-2">
+                    Active: <span className="text-primary-600 font-semibold">{activeModelName}</span>
+                  </label>
+                  <select 
+                    className="input-field"
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                  >
+                    <option value="">Select a model...</option>
+                    {availableModels.map(model => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} ({model.size_mb} MB)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={() => selectedModel && handleSwitchModel(selectedModel)}
+                  disabled={!selectedModel}
+                  className="btn-primary mt-6"
+                >
+                  Switch Model
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                Available models: {availableModels.length} | Switch to use a different FL round model for scoring
+              </p>
+            </div>
+          )}
 
           {/* New Model Alert */}
           {modelUpdateAvailable && (

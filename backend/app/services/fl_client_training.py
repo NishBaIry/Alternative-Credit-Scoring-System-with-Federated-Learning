@@ -70,14 +70,45 @@ class BankFLClient:
         self.encoders = {}
         
     def load_data(self):
-        """Load and preprocess bank's local dataset"""
+        """Load and preprocess bank's local dataset (combines customers.csv + fl_dataset.csv)"""
         print("=" * 80)
         print(f"FEDERATED LEARNING CLIENT - {self.bank_name}")
         print("=" * 80)
         
-        print(f"\n[1/6] Loading local dataset: {self.dataset_path}")
-        df = pd.read_csv(self.dataset_path)
-        print(f"  ✓ Data shape: {df.shape}")
+        print(f"\n[1/6] Loading training data...")
+        
+        # Load base customer data (old FL dataset renamed to customers.csv)
+        customers_path = 'data/customers.csv'
+        fl_new_data_path = 'data/fl_dataset.csv'
+        
+        dfs_to_combine = []
+        
+        # Load customers.csv (base data)
+        if os.path.exists(customers_path):
+            customers_df = pd.read_csv(customers_path)
+            print(f"  ✓ customers.csv: {len(customers_df)} rows")
+            dfs_to_combine.append(customers_df)
+        else:
+            print(f"  ⚠️  customers.csv not found")
+        
+        # Load fl_dataset.csv (new applications since last FL round)
+        if os.path.exists(fl_new_data_path):
+            fl_new_df = pd.read_csv(fl_new_data_path)
+            if len(fl_new_df) > 0:
+                print(f"  ✓ fl_dataset.csv: {len(fl_new_df)} new rows")
+                dfs_to_combine.append(fl_new_df)
+            else:
+                print(f"  ✓ fl_dataset.csv: empty (no new data)")
+        else:
+            print(f"  ℹ️  fl_dataset.csv not found (no new data yet)")
+        
+        # Combine datasets
+        if len(dfs_to_combine) == 0:
+            raise FileNotFoundError("No training data available! Need customers.csv or fl_dataset.csv")
+        
+        df = pd.concat(dfs_to_combine, ignore_index=True)
+        print(f"\n  ✓ Combined dataset: {df.shape[0]} total rows")
+        print(f"    (Base: {len(dfs_to_combine[0])} + New: {len(dfs_to_combine[1]) if len(dfs_to_combine) > 1 else 0})")
         
         # Remove authentication columns
         remove_cols = ['customer_id', 'password']
@@ -162,7 +193,7 @@ class BankFLClient:
         print(f"\n[6/6] Loading base model...")
         
         try:
-            self.model = tf.keras.models.load_model(model_path, compile=False)
+            self.model = tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
             self.base_weights = self.model.get_weights()
             print(f"  ✓ Model loaded: {len(self.base_weights)} layers")
             
@@ -312,17 +343,15 @@ def run_fl_training():
     # Load and preprocess data
     X_train, y_train = client.load_data()
     
-    # Download global model from server
-    model_path = client.download_global_model()
+    # Use local base model (don't download - that's only for updates after aggregation!)
+    model_path = BASE_MODEL_PATH
     
-    # If download failed, try to use local base model
-    if model_path is None:
-        if os.path.exists(BASE_MODEL_PATH):
-            print(f"  ℹ️  Using local base model: {BASE_MODEL_PATH}")
-            model_path = BASE_MODEL_PATH
-        else:
-            print(f"  ❌ No model available. Exiting.")
-            return False
+    if not os.path.exists(model_path):
+        print(f"  ❌ Local base model not found at: {model_path}")
+        print(f"  ℹ️  Please ensure base model exists before training.")
+        return False
+    
+    print(f"\n[5/6] Using local base model: {model_path}")
     
     # Load model
     if not client.load_model(model_path):
