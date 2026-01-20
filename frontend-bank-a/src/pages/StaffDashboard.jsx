@@ -84,13 +84,13 @@ const StaffDashboard = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Link to="/staff/customers" className="card hover:shadow-lg transition-shadow">
-            <h3 className="text-xl font-semibold mb-2">Customer Management</h3>
-            <p className="text-gray-600">View and manage customer data</p>
+            <h3 className="text-xl font-semibold mb-2">Manage Accounts</h3>
+            <p className="text-gray-600">View and manage customer accounts</p>
           </Link>
-          
+
           <Link to="/staff/score-application" className="card hover:shadow-lg transition-shadow">
-            <h3 className="text-xl font-semibold mb-2">Score Application</h3>
-            <p className="text-gray-600">Score new loan applications</p>
+            <h3 className="text-xl font-semibold mb-2">Apply for a Loan</h3>
+            <p className="text-gray-600">Process new loan applications</p>
           </Link>
           
           <Link to="/staff/model-training" className="card hover:shadow-lg transition-shadow">

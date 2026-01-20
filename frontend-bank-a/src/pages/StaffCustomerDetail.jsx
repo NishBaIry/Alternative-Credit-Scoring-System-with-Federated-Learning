@@ -1,12 +1,12 @@
 // StaffCustomerDetail.jsx
-// Detailed view of a single borrower for bank staff.
-// Shows profile section, loan info, behavioural and UPI aggregates in cards.
-// Includes latest score + history snippet (reuses ScoreGauge + ChartPlaceholder).
-// Optionally allows editing of non-sensitive fields (via /staff/customers/{id} PATCH).
-// Provides a button to re-score this customer using current local model.
+// Detailed view of a single customer for bank staff.
+// Shows Alternative Credit Score gauge (300-900) with color-coded risk.
+// Sections: Personal Information, Financial Metrics, Credit History, UPI Activity.
+// All missing values display as "NA" instead of 0 or blank.
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import ScoreGauge from '../components/ScoreGauge';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002';
 
@@ -33,14 +33,18 @@ const StaffCustomerDetail = () => {
     }
   };
 
-  const getRiskBand = (defaultFlag) => {
-    return defaultFlag === 0 ? 'Low' : 'High';
+  // Helper function to display values or "NA" for missing data
+  const formatValue = (value, formatter = null) => {
+    if (value === null || value === undefined || value === '' || (typeof value === 'number' && isNaN(value))) {
+      return 'NA';
+    }
+    return formatter ? formatter(value) : value;
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <div className="card p-8 text-center">
             <p className="text-gray-500">Loading customer details...</p>
           </div>
@@ -52,7 +56,7 @@ const StaffCustomerDetail = () => {
   if (!customer) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <div className="card p-8 text-center">
             <p className="text-red-600">Customer not found</p>
             <button onClick={() => navigate('/staff/customers')} className="btn btn-secondary mt-4">
@@ -66,178 +70,115 @@ const StaffCustomerDetail = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Customer Details</h1>
-          <button onClick={() => navigate('/staff/customers')} className="btn btn-secondary">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">Customer Details</h1>
+            <p className="text-sm text-gray-600 mt-1 font-mono">ID: {customer.customer_id}</p>
+          </div>
+          <button
+            onClick={() => navigate('/staff/customers')}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
             ← Back to List
           </button>
         </div>
-        
-        <div className="grid gap-6">
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Risk Assessment</h2>
-            <div className="text-center">
-              <p className="text-sm text-gray-600 mb-2">Customer ID: {customer.customer_id}</p>
-              <p className={`text-lg font-semibold ${
-                getRiskBand(customer.default_flag) === 'Low' ? 'text-green-600' : 'text-red-600'
-              }`}>
-                Risk Band: {getRiskBand(customer.default_flag)}
-              </p>
+
+        <div className="space-y-6">
+          {/* Alternative Credit Score Gauge */}
+          <div className="card p-8">
+            <ScoreGauge score={customer.alt_score || customer.credit_score} />
+          </div>
+
+          {/* Personal Information */}
+          <div className="card p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Personal Information</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              <InfoItem label="Age" value={formatValue(customer.age)} />
+              <InfoItem label="Gender" value={formatValue(customer.gender)} />
+              <InfoItem label="Marital Status" value={formatValue(customer.marital_status)} />
+              <InfoItem label="Education" value={formatValue(customer.education)} />
+              <InfoItem label="Region" value={formatValue(customer.region)} />
+              <InfoItem label="Home Ownership" value={formatValue(customer.home_ownership)} />
+              <InfoItem label="Dependents" value={formatValue(customer.dependents)} />
             </div>
           </div>
 
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Age</p>
-                <p className="font-medium">{customer.age}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Gender</p>
-                <p className="font-medium">{customer.gender}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Region</p>
-                <p className="font-medium">{customer.region}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Education</p>
-                <p className="font-medium">{customer.education}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Marital Status</p>
-                <p className="font-medium">{customer.marital_status}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Dependents</p>
-                <p className="font-medium">{customer.dependents}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Home Ownership</p>
-                <p className="font-medium">{customer.home_ownership}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Job Type</p>
-                <p className="font-medium">{customer.job_type}</p>
-              </div>
+          {/* Financial Metrics */}
+          <div className="card p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Financial Metrics</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              <InfoItem
+                label="Monthly Income"
+                value={formatValue(customer.monthly_income, (v) => `₹${v.toLocaleString()}`)}
+              />
+              <InfoItem
+                label="Annual Income"
+                value={formatValue(customer.annual_income, (v) => `₹${v.toLocaleString()}`)}
+              />
+              <InfoItem
+                label="DTI"
+                value={formatValue(customer.dti, (v) => `${v.toFixed(2)}%`)}
+              />
+              <InfoItem
+                label="Total DTI"
+                value={formatValue(customer.total_dti, (v) => `${v.toFixed(2)}%`)}
+              />
+              <InfoItem
+                label="Monthly Debt Payments"
+                value={formatValue(customer.monthly_debt_payments, (v) => `₹${v.toLocaleString()}`)}
+              />
+              <InfoItem
+                label="Net Worth"
+                value={formatValue(customer.net_worth, (v) => `₹${v.toLocaleString()}`)}
+              />
             </div>
           </div>
 
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Financial Metrics</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Monthly Income</p>
-                <p className="font-medium">₹{customer.monthly_income?.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Annual Income</p>
-                <p className="font-medium">₹{customer.annual_income?.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">DTI Ratio</p>
-                <p className="font-medium">{customer.dti?.toFixed(2)}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Total DTI</p>
-                <p className="font-medium">{customer.total_dti?.toFixed(2)}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Savings Balance</p>
-                <p className="font-medium">₹{customer.savings_balance?.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Checking Balance</p>
-                <p className="font-medium">₹{customer.checking_balance?.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Net Worth</p>
-                <p className="font-medium">₹{customer.net_worth?.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">CC Utilization</p>
-                <p className="font-medium">{customer.CC_utilization?.toFixed(2)}%</p>
-              </div>
+          {/* Credit History */}
+          <div className="card p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Credit History</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              <InfoItem label="Total Enquiries" value={formatValue(customer.tot_enq)} />
+              <InfoItem label="Enquiries (Last 3 months)" value={formatValue(customer.enq_L3m)} />
+              <InfoItem label="Enquiries (Last 6 months)" value={formatValue(customer.enq_L6m)} />
+              <InfoItem label="Enquiries (Last 12 months)" value={formatValue(customer.enq_L12m)} />
+              <InfoItem label="30 DPD Count" value={formatValue(customer.num_30dpd)} />
+              <InfoItem label="60 DPD Count" value={formatValue(customer.num_60dpd)} />
+              <InfoItem label="Max Delinquency Level" value={formatValue(customer.max_delinquency_level)} />
+              <InfoItem label="Utility Bill Score" value={formatValue(customer.utility_bill_score)} />
             </div>
           </div>
 
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Loan Details</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Loan Amount</p>
-                <p className="font-medium">₹{customer.loan_amount?.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Loan Duration</p>
-                <p className="font-medium">{customer.loan_duration_months} months</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Loan Purpose</p>
-                <p className="font-medium">{customer.loan_purpose}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Interest Rate</p>
-                <p className="font-medium">{customer.interest_rate?.toFixed(2)}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Monthly Payment</p>
-                <p className="font-medium">₹{customer.monthly_loan_payment?.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Credit History</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Total Enquiries</p>
-                <p className="font-medium">{customer.tot_enq}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Enquiries (Last 3 months)</p>
-                <p className="font-medium">{customer.enq_L3m}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">30 DPD Count</p>
-                <p className="font-medium">{customer.num_30dpd}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">60 DPD Count</p>
-                <p className="font-medium">{customer.num_60dpd}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Max Delinquency</p>
-                <p className="font-medium">{customer.max_delinquency_level}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Utility Bill Score</p>
-                <p className="font-medium">{customer.utility_bill_score}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">UPI Activity</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Avg Transaction Count</p>
-                <p className="font-medium">{customer.upi_txn_count_avg?.toFixed(2)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Avg Monthly Spend</p>
-                <p className="font-medium">₹{customer.upi_total_spend_month_avg?.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Merchant Diversity</p>
-                <p className="font-medium">{customer.upi_merchant_diversity?.toFixed(2)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Failed Transaction Rate</p>
-                <p className="font-medium">{customer.upi_failed_txn_rate?.toFixed(2)}%</p>
-              </div>
+          {/* UPI Activity */}
+          <div className="card p-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">UPI Activity</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              <InfoItem
+                label="Avg Transaction Count"
+                value={formatValue(customer.upi_txn_count_avg, (v) => v.toFixed(2))}
+              />
+              <InfoItem
+                label="Avg Monthly Spend"
+                value={formatValue(customer.upi_total_spend_month_avg, (v) => `₹${v.toLocaleString()}`)}
+              />
+              <InfoItem
+                label="Merchant Diversity"
+                value={formatValue(customer.upi_merchant_diversity, (v) => v.toFixed(2))}
+              />
+              <InfoItem
+                label="Spend Volatility"
+                value={formatValue(customer.upi_spend_volatility, (v) => v.toFixed(2))}
+              />
+              <InfoItem
+                label="Failed Transaction Rate"
+                value={formatValue(customer.upi_failed_txn_rate, (v) => `${v.toFixed(2)}%`)}
+              />
+              <InfoItem
+                label="Essentials Share"
+                value={formatValue(customer.upi_essentials_share, (v) => `${v.toFixed(2)}%`)}
+              />
             </div>
           </div>
         </div>
@@ -245,5 +186,13 @@ const StaffCustomerDetail = () => {
     </div>
   );
 };
+
+// Helper component for displaying labeled information
+const InfoItem = ({ label, value }) => (
+  <div>
+    <p className="text-sm text-gray-600 mb-1">{label}</p>
+    <p className="font-medium text-gray-900">{value}</p>
+  </div>
+);
 
 export default StaffCustomerDetail;

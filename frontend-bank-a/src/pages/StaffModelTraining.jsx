@@ -28,7 +28,10 @@ const StaffModelTraining = () => {
   
   // Error state
   const [error, setError] = useState(null);
-  
+
+  // New applications count
+  const [newApplicationsCount, setNewApplicationsCount] = useState(0);
+
   // Refs for cleanup
   const pollIntervalRef = useRef(null);
 
@@ -70,6 +73,19 @@ const StaffModelTraining = () => {
       }
     } catch (err) {
       console.error('Failed to fetch local model info:', err);
+    }
+  }, []);
+
+  // Fetch new applications count
+  const fetchNewApplicationsCount = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/staff/applications/count`);
+      if (response.ok) {
+        const data = await response.json();
+        setNewApplicationsCount(data.count || 0);
+      }
+    } catch (err) {
+      console.error('Failed to fetch new applications count:', err);
     }
   }, []);
 
@@ -169,22 +185,29 @@ const StaffModelTraining = () => {
       if (response.ok) {
         const data = await response.json();
         setTrainingStatus('completed');
-        setTrainingOutput(prev => 
+
+        const mergedMsg = data.merged_applications > 0
+          ? `\n${data.merged_applications} new applications merged into training dataset.\n`
+          : '';
+
+        setTrainingOutput(prev =>
           prev + `\n✅ Training Complete!\n` +
           `Bank: ${data.bank_id}\n` +
           `Epochs: ${data.epochs}\n` +
-          `Status: ${data.status}\n\n` +
-          `Weights uploaded to FL server.\n` +
+          `Status: ${data.status}\n` +
+          mergedMsg +
+          `\nWeights uploaded to FL server.\n` +
           `Waiting for other banks to complete training...\n\n` +
           `Output:\n${data.output || 'No output'}`
         );
-        
+
         // Start polling for aggregated model
         startPolling();
-        
-        // Refresh status
+
+        // Refresh status and application count
         await fetchFLStatus();
         await fetchLocalModelInfo();
+        await fetchNewApplicationsCount();
       } else {
         const errorData = await response.json();
         setTrainingStatus('error');
@@ -228,12 +251,13 @@ const StaffModelTraining = () => {
     fetchFLStatus();
     fetchLocalModelInfo();
     fetchAvailableModels();
-    
+    fetchNewApplicationsCount();
+
     // Cleanup on unmount
     return () => {
       stopPolling();
     };
-  }, [fetchFLStatus, fetchLocalModelInfo, fetchAvailableModels, stopPolling]);
+  }, [fetchFLStatus, fetchLocalModelInfo, fetchAvailableModels, fetchNewApplicationsCount, stopPolling]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -397,9 +421,34 @@ const StaffModelTraining = () => {
             </div>
           )}
 
+          {/* New Applications Status */}
+          {newApplicationsCount > 0 && (
+            <div className="card bg-blue-50 border-2 border-blue-400 rounded-lg shadow p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-blue-800">📋 New Applications Ready</h3>
+                  <p className="text-blue-700">
+                    {newApplicationsCount} new {newApplicationsCount === 1 ? 'application' : 'applications'} will be merged into training dataset when FL training starts.
+                  </p>
+                </div>
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-blue-600">{newApplicationsCount}</div>
+                  <div className="text-sm text-blue-600">Pending</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Training Actions */}
           <div className="card bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold mb-4">Training Actions</h2>
+            {newApplicationsCount > 0 && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> Starting FL training will automatically merge {newApplicationsCount} new {newApplicationsCount === 1 ? 'application' : 'applications'} into the training dataset.
+                </p>
+              </div>
+            )}
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <button
