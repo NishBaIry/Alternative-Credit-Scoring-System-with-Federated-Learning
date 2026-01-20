@@ -10,95 +10,88 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
-import pandas as pd
-import os
+from app.services.customer_service import CustomerService
+from app.services.nn_scoring_service import get_scoring_service
+import logging
 
 router = APIRouter()
-
-CUSTOMERS_CSV = 'data/customers.csv'
+logger = logging.getLogger(__name__)
 
 @router.get("/customers")
-async def list_customers(skip: int = 0, limit: int = 100, risk_band: Optional[str] = None):
+async def list_customers(bank_id: str = "bank_a", skip: int = 0, limit: int = 100, min_score: Optional[int] = None):
     """
-    List all customers for the bank.
+    List all customers for the bank from SQLite.
     Supports pagination and filtering.
     """
     try:
-        if not os.path.exists(CUSTOMERS_CSV):
-            return {"total": 0, "customers": []}
+        service = CustomerService(bank_id)
+        filters = {}
+        if min_score is not None:
+            filters['min_score'] = min_score
         
-        df = pd.read_csv(CUSTOMERS_CSV)
-        
-        # Remove password column for security
-        if 'password' in df.columns:
-            df = df.drop(columns=['password'])
-        
-        # Apply pagination
-        total = len(df)
-        paginated_df = df.iloc[skip:skip+limit]
-        
-        # Convert to list of dicts
-        customers = paginated_df.to_dict('records')
-        
-        return {
-            "total": total,
-            "customers": customers
-        }
+        result = service.get_customer_list(skip=skip, limit=limit, filters=filters)
+        return result
     except Exception as e:
+        logger.error(f"Failed to load customers: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load customers: {str(e)}")
 
 @router.get("/customers/{customer_id}")
-async def get_customer_detail(customer_id: str):
+async def get_customer_detail(customer_id: str, bank_id: str = "bank_a"):
     """
-    Get detailed information for a specific customer.
+    Get detailed information for a specific customer from SQLite.
     """
     try:
-        if not os.path.exists(CUSTOMERS_CSV):
-            raise HTTPException(status_code=404, detail="Customers database not found")
+        service = CustomerService(bank_id)
+        customer = service.get_customer_detail(customer_id)
         
-        df = pd.read_csv(CUSTOMERS_CSV)
-        customer = df[df['customer_id'] == customer_id]
-        
-        if customer.empty:
+        if not customer:
             raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
-        
-        # Remove password for security
-        customer_data = customer.iloc[0].to_dict()
-        if 'password' in customer_data:
-            del customer_data['password']
         
         return {
             "status": "success",
-            "customer": customer_data
+            "customer": customer
         }
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to get customer: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get customer: {str(e)}")
 
 @router.patch("/customers/{customer_id}")
-async def update_customer(customer_id: str, update_data: dict):
+async def update_customer(customer_id: str, update_data: dict, bank_id: str = "bank_a"):
     """
-    Update non-sensitive customer information.
+    Update non-sensitive customer information in SQLite.
     """
-    # TODO: Implement customer update
-    return {"message": "Customer updated successfully"}
+    try:
+        service = CustomerService(bank_id)
+        result = service.update_customer(customer_id, update_data)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to update customer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/applications/score")
-async def score_application(application_data: dict):
+async def score_application(application_data: dict, bank_id: str = "bank_a"):
     """
     Score a new loan application using the local model.
     """
-    # TODO: Implement application scoring
-    return {
-        "score": 742,
-        "risk_band": "Approve",
-        "top_drivers": [
-            "High bill on-time rate",
-            "Strong UPI essentials share",
-            "Low DTI ratio"
-        ]
-    }
+    try:
+        scoring_service = get_scoring_service()
+        alt_score, risk_band, p_default = scoring_service.predict_score(application_data)
+        
+        return {
+            "status": "success",
+            "alt_score": alt_score,
+            "credit_score": alt_score,
+            "risk_band": risk_band,
+            "default_probability": round(p_default, 4),
+            "recommendation": "Approve" if alt_score >= 650 else "Review" if alt_score >= 600 else "Decline"
+        }
+    except Exception as e:
+        logger.error(f"Failed to score application: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/model/status")
 async def get_model_status():

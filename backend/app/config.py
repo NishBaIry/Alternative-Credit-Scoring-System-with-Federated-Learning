@@ -17,21 +17,26 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Database (if using real DB later)
-    DATABASE_URL: Optional[str] = None
+    # Database Paths (SQLite)
+    BANK_A_DB: str = "data/bank_a.db"
+    BANK_B_DB: str = "data/bank_b.db"
     
-    # Bank Data Paths
-    BANK_A_DATA_PATH: str = "app/data/bank_a"
-    BANK_B_DATA_PATH: str = "app/data/bank_b"
+    # Model Paths
+    MODEL_PATH: str = "models/model.h5"
+    WEIGHTS_PATH: str = "models/model.weights.h5"
+    SCALER_PATH: str = "models/scaler.pkl"
+    ENCODERS_PATH: str = "models/encoders.pkl"
     
     # Model Settings
-    MODEL_VERSION: str = "1.0"
+    MODEL_VERSION: str = "2.0"
     SCORE_MIN: int = 300
     SCORE_MAX: int = 900
     
     # Federated Learning
     FL_SERVER_URL: Optional[str] = None
     FL_ROUNDS: int = 10
+    FL_EPOCHS: int = 5
+    FL_BATCH_SIZE: int = 256
     
     class Config:
         env_file = ".env"

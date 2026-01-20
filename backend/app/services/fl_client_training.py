@@ -1,6 +1,7 @@
 """
-Federated Learning Client Training Script for Bank A
-Loads base model, fine-tunes on bank's local data, uploads weights to FL server
+Federated Learning Client Training Script for Bank
+Loads base model, fine-tunes on bank's local SQLite data, uploads weights to FL server
+Updated to match train_neural_network_v2.py pipeline
 """
 
 import os
@@ -8,6 +9,7 @@ import sys
 import requests
 import numpy as np
 import pandas as pd
+import sqlite3
 import tensorflow as tf
 from tensorflow import keras
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -17,6 +19,9 @@ from datetime import datetime
 import pickle
 from dotenv import load_dotenv
 
+# Set XLA flags for GPU
+os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=' + os.environ.get('CONDA_PREFIX', '')
+
 # Load environment variables
 load_dotenv()
 
@@ -24,33 +29,46 @@ load_dotenv()
 FL_SERVER_URL = os.getenv('FL_SERVER_URL', 'http://localhost:5000')
 BANK_ID = os.getenv('BANK_ID', 'bank_a')
 BANK_NAME = os.getenv('BANK_NAME', 'Bank A')
-LOCAL_DATASET_PATH = os.getenv('LOCAL_DATASET_PATH', 'data/fl_dataset.csv')
-BASE_MODEL_PATH = os.getenv('BASE_MODEL_PATH', 'models/global_model.h5')
-WEIGHTS_UPLOAD_PATH = os.getenv('WEIGHTS_UPLOAD_PATH', 'models/client_weights.npz')
+DATABASE_PATH = f'data/{BANK_ID}.db'
+BASE_MODEL_PATH = 'models/global_model.h5'
+CLIENT_MODEL_PATH = f'models/{BANK_ID}_model.h5'
+WEIGHTS_UPLOAD_PATH = f'models/{BANK_ID}_weights.npz'
 
 # Training hyperparameters
-EPOCHS = int(os.getenv('FL_EPOCHS', 10))
+EPOCHS = int(os.getenv('FL_EPOCHS', 5))
 BATCH_SIZE = int(os.getenv('FL_BATCH_SIZE', 256))
 LEARNING_RATE = float(os.getenv('FL_LEARNING_RATE', 0.001))
 VALIDATION_SPLIT = float(os.getenv('FL_VALIDATION_SPLIT', 0.2))
 
-# Feature specification
+# Feature specification (46 features - same as train_neural_network_v2.py)
 FEATURE_COLS = [
+    # Demographics
     'age', 'gender', 'marital_status', 'education', 'dependents', 'home_ownership', 'region',
+    
+    # Income & Capacity
     'monthly_income', 'annual_income', 'job_type', 'job_tenure_years', 'net_monthly_income',
     'monthly_debt_payments', 'dti', 'total_dti',
     'savings_balance', 'checking_balance', 'total_assets', 'total_liabilities', 'net_worth',
+    
+    # Loan Request
     'loan_amount', 'loan_duration_months', 'loan_purpose',
     'base_interest_rate', 'interest_rate', 'monthly_loan_payment',
+    
+    # Traditional Credit Behavior
     'tot_enq', 'enq_L3m', 'enq_L6m', 'enq_L12m', 'time_since_recent_enq',
     'num_30dpd', 'num_60dpd', 'max_delinquency_level',
     'CC_utilization', 'PL_utilization', 'HL_flag', 'GL_flag',
     'utility_bill_score',
+    
+    # UPI Alternative Data
     'upi_txn_count_avg', 'upi_txn_count_std', 'upi_total_spend_month_avg',
     'upi_merchant_diversity', 'upi_spend_volatility', 'upi_failed_txn_rate', 'upi_essentials_share',
 ]
 
 TARGET_COL = "default_flag"
+
+# Categorical columns that need encoding (only these 3)
+CATEGORICAL_COLS = ['gender', 'marital_status', 'education']
 
 # Set random seeds
 np.random.seed(42)
@@ -59,10 +77,10 @@ tf.random.set_seed(42)
 class BankFLClient:
     """Federated Learning Client for Bank"""
     
-    def __init__(self, bank_id, bank_name, dataset_path, server_url):
+    def __init__(self, bank_id, bank_name, database_path, server_url):
         self.bank_id = bank_id
         self.bank_name = bank_name
-        self.dataset_path = dataset_path
+        self.database_path = database_path
         self.server_url = server_url
         self.model = None
         self.base_weights = None
@@ -70,98 +88,75 @@ class BankFLClient:
         self.encoders = {}
         
     def load_data(self):
-        """Load and preprocess bank's local dataset (combines customers.csv + fl_dataset.csv)"""
+        """Load and preprocess bank's local dataset from SQLite database"""
         print("=" * 80)
         print(f"FEDERATED LEARNING CLIENT - {self.bank_name}")
         print("=" * 80)
         
-        print(f"\n[1/6] Loading training data...")
+        print(f"\n[1/6] Loading training data from SQLite...")
         
-        # Load base customer data (old FL dataset renamed to customers.csv)
-        customers_path = 'data/customers.csv'
-        fl_new_data_path = 'data/fl_dataset.csv'
+        # Check if database exists
+        if not os.path.exists(self.database_path):
+            raise FileNotFoundError(f"Database not found: {self.database_path}")
         
-        dfs_to_combine = []
+        # Connect to SQLite and load data
+        conn = sqlite3.connect(self.database_path)
+        df = pd.read_sql_query("SELECT * FROM customers", conn)
+        conn.close()
         
-        # Load customers.csv (base data)
-        if os.path.exists(customers_path):
-            customers_df = pd.read_csv(customers_path)
-            print(f"  ✓ customers.csv: {len(customers_df)} rows")
-            dfs_to_combine.append(customers_df)
-        else:
-            print(f"  ⚠️  customers.csv not found")
+        print(f"  ✓ Loaded {len(df):,} rows from {self.database_path}")
         
-        # Load fl_dataset.csv (new applications since last FL round)
-        if os.path.exists(fl_new_data_path):
-            fl_new_df = pd.read_csv(fl_new_data_path)
-            if len(fl_new_df) > 0:
-                print(f"  ✓ fl_dataset.csv: {len(fl_new_df)} new rows")
-                dfs_to_combine.append(fl_new_df)
-            else:
-                print(f"  ✓ fl_dataset.csv: empty (no new data)")
-        else:
-            print(f"  ℹ️  fl_dataset.csv not found (no new data yet)")
-        
-        # Combine datasets
-        if len(dfs_to_combine) == 0:
-            raise FileNotFoundError("No training data available! Need customers.csv or fl_dataset.csv")
-        
-        df = pd.concat(dfs_to_combine, ignore_index=True)
-        print(f"\n  ✓ Combined dataset: {df.shape[0]} total rows")
-        print(f"    (Base: {len(dfs_to_combine[0])} + New: {len(dfs_to_combine[1]) if len(dfs_to_combine) > 1 else 0})")
-        
-        # Remove authentication columns
-        remove_cols = ['customer_id', 'password']
+        # Remove non-feature columns
+        remove_cols = ['customer_id', 'password', 'created_at', 'updated_at', 'credit_score']
         df = df.drop(columns=[col for col in remove_cols if col in df.columns])
         
         # Separate target
+        if TARGET_COL not in df.columns:
+            raise ValueError(f"Target column '{TARGET_COL}' not found in database")
+        
         y = df[TARGET_COL].astype(int).values
         
-        # Select features
-        available_features = [col for col in FEATURE_COLS if col in df.columns]
-        X = df[available_features].copy()
+        # Select features (ensure all expected features exist)
+        for col in FEATURE_COLS:
+            if col not in df.columns:
+                df[col] = 0  # Fill missing columns with 0
         
-        # Identify categorical and numerical columns
-        categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
-        numerical_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+        X = df[FEATURE_COLS].copy()
         
         print(f"  ✓ Features: {X.shape[1]}")
-        print(f"  ✓ Numerical: {len(numerical_cols)}, Categorical: {len(categorical_cols)}")
+        print(f"  ✓ Samples: {X.shape[0]:,}")
         print(f"  ✓ Default rate: {y.mean():.2%}")
         
         # Handle missing values
-        print("\n[2/6] Handling missing values...")
-        for col in numerical_cols:
+        print("\n[2/6] Preprocessing data...")
+        for col in FEATURE_COLS:
             if X[col].isnull().any():
-                median_val = X[col].median()
-                X[col].fillna(median_val, inplace=True)
+                if col in CATEGORICAL_COLS:
+                    X[col].fillna('Unknown', inplace=True)
+                else:
+                    X[col].fillna(0, inplace=True)
         
-        for col in categorical_cols:
-            if X[col].isnull().any():
-                mode_val = X[col].mode()
-                if len(mode_val) > 0:
-                    X[col].fillna(mode_val[0], inplace=True)
-        
-        # Encode categorical variables
-        print("\n[3/6] Encoding categorical variables...")
-        for col in categorical_cols:
-            le = LabelEncoder()
-            X[col] = le.fit_transform(X[col].astype(str))
-            self.encoders[col] = le
+        # Encode categorical variables (only the 3 that were encoded in training)
+        print(f"  ✓ Encoding {len(CATEGORICAL_COLS)} categorical features...")
+        for col in CATEGORICAL_COLS:
+            if col in X.columns:
+                le = LabelEncoder()
+                X[col] = le.fit_transform(X[col].astype(str))
+                self.encoders[col] = le
         
         # Scale features
-        print("\n[4/6] Scaling features...")
+        print("  ✓ Scaling features...")
         self.scaler = StandardScaler()
         X_scaled = self.scaler.fit_transform(X)
         X_scaled = np.nan_to_num(X_scaled, nan=0.0, posinf=0.0, neginf=0.0)
         
-        print(f"  ✓ Scaled shape: {X_scaled.shape}")
+        print(f"  ✓ Preprocessed shape: {X_scaled.shape}")
         
         return X_scaled, y
     
     def download_global_model(self):
         """Download global model from FL server"""
-        print(f"\n[5/6] Downloading global model from server...")
+        print(f"\n[3/6] Downloading global model from server...")
         
         try:
             response = requests.get(
@@ -182,79 +177,87 @@ class BankFLClient:
                 return temp_model_path
             else:
                 print(f"  ⚠️  Server returned status {response.status_code}")
+                # Use local model if download fails
+                if os.path.exists(BASE_MODEL_PATH):
+                    print(f"  ✓ Using local model: {BASE_MODEL_PATH}")
+                    return BASE_MODEL_PATH
                 return None
         
         except Exception as e:
             print(f"  ⚠️  Download failed: {e}")
+            # Use local model if download fails
+            if os.path.exists(BASE_MODEL_PATH):
+                print(f"  ✓ Using local model: {BASE_MODEL_PATH}")
+                return BASE_MODEL_PATH
             return None
     
     def load_model(self, model_path):
         """Load base model"""
-        print(f"\n[6/6] Loading base model...")
+        print(f"\n[4/6] Loading base model...")
         
         try:
-            self.model = tf.keras.models.load_model(model_path, compile=False, safe_mode=False)
+            # Load model (will use GPU if available)
+            self.model = tf.keras.models.load_model(model_path, compile=False)
             self.base_weights = self.model.get_weights()
             print(f"  ✓ Model loaded: {len(self.base_weights)} layers")
             
             # Compile model
             self.model.compile(
-                optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+                optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE),
                 loss='binary_crossentropy',
-                metrics=['accuracy', 
-                        keras.metrics.Precision(name='precision'),
-                        keras.metrics.Recall(name='recall')]
+                metrics=['accuracy', tf.keras.metrics.AUC(name='auc')]
             )
+            print(f"  ✓ Model compiled with Adam optimizer (lr={LEARNING_RATE})")
             
             return True
-        
+            
         except Exception as e:
             print(f"  ❌ Failed to load model: {e}")
             return False
     
-    def train_local_model(self, X_train, y_train):
-        """Fine-tune model on local bank data"""
-        print("\n" + "=" * 80)
-        print("STARTING LOCAL TRAINING")
-        print("=" * 80)
-        
-        print(f"\nTraining Configuration:")
+    def train(self, X_train, y_train):
+        """Train model on local data"""
+        print(f"\n[5/6] Training on local data...")
         print(f"  • Epochs: {EPOCHS}")
-        print(f"  • Batch Size: {BATCH_SIZE}")
-        print(f"  • Learning Rate: {LEARNING_RATE}")
-        print(f"  • Validation Split: {VALIDATION_SPLIT}")
-        print(f"  • Training Samples: {len(X_train)}")
+        print(f"  • Batch size: {BATCH_SIZE}")
+        print(f"  • Validation split: {VALIDATION_SPLIT}")
         
-        # Early stopping
-        early_stop = keras.callbacks.EarlyStopping(
-            monitor='val_loss',
-            patience=5,
-            restore_best_weights=True,
-            verbose=1
-        )
+        # Check GPU availability
+        gpus = tf.config.list_physical_devices('GPU')
+        print(f"  • GPUs available: {len(gpus)}")
+        if gpus:
+            print(f"    └─ {gpus[0].name}")
         
-        # Train
-        print("\nTraining Progress:")
-        history = self.model.fit(
-            X_train, y_train,
-            epochs=EPOCHS,
-            batch_size=BATCH_SIZE,
-            validation_split=VALIDATION_SPLIT,
-            callbacks=[early_stop],
-            verbose=1
-        )
-        
-        print("\n✅ Training completed!")
-        
-        # Evaluate
-        print("\nFinal Metrics:")
-        results = self.model.evaluate(X_train, y_train, verbose=0)
-        print(f"  • Loss: {results[0]:.4f}")
-        print(f"  • Accuracy: {results[1]:.4f}")
-        print(f"  • Precision: {results[2]:.4f}")
-        print(f"  • Recall: {results[3]:.4f}")
-        
-        return history
+        try:
+            # Train (will use GPU if available)
+            history = self.model.fit(
+                X_train, y_train,
+                epochs=EPOCHS,
+                batch_size=BATCH_SIZE,
+                validation_split=VALIDATION_SPLIT,
+                verbose=1
+            )
+            
+            # Get final metrics
+            final_loss = history.history['loss'][-1]
+            final_acc = history.history['accuracy'][-1]
+            final_auc = history.history['auc'][-1]
+            
+            val_loss = history.history['val_loss'][-1]
+            val_acc = history.history['val_accuracy'][-1]
+            val_auc = history.history['val_auc'][-1]
+            
+            print(f"\n  ✓ Training completed!")
+            print(f"    Train - Loss: {final_loss:.4f}, Acc: {final_acc:.4f}, AUC: {final_auc:.4f}")
+            print(f"    Val   - Loss: {val_loss:.4f}, Acc: {val_acc:.4f}, AUC: {val_auc:.4f}")
+            
+            return history
+            
+        except Exception as e:
+            print(f"  ❌ Training failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     def save_weights(self):
         """Save trained weights to file"""
@@ -330,48 +333,59 @@ class BankFLClient:
             return False
 
 def run_fl_training():
-    """Main function to run FL training for bank"""
+    """Main FL training workflow"""
+    print("\n" + "=" * 80)
+    print("FEDERATED LEARNING CLIENT - LOCAL TRAINING")
+    print("=" * 80)
     
     # Initialize client
     client = BankFLClient(
         bank_id=BANK_ID,
         bank_name=BANK_NAME,
-        dataset_path=LOCAL_DATASET_PATH,
+        database_path=DATABASE_PATH,
         server_url=FL_SERVER_URL
     )
     
-    # Load and preprocess data
-    X_train, y_train = client.load_data()
+    try:
+        # Step 1: Load data from SQLite
+        X_train, y_train = client.load_data()
+        
+        # Step 2: Download or use local global model
+        model_path = client.download_global_model()
+        if model_path is None:
+            print("\n❌ Failed to get base model")
+            return
+        
+        # Step 3: Load model
+        if not client.load_model(model_path):
+            print("\n❌ Failed to load model")
+            return
+        
+        # Step 4: Train on local data
+        history = client.train(X_train, y_train)
+        if history is None:
+            print("\n❌ Training failed")
+            return
+        
+        # Step 5: Save weights
+        weights_path = client.save_weights()
+        
+        # Step 6: Upload weights to server
+        success = client.upload_weights_to_server(weights_path, num_samples=len(X_train))
+        
+        if success:
+            print("\n" + "=" * 80)
+            print("✅ FL TRAINING COMPLETED SUCCESSFULLY")
+            print("=" * 80)
+        else:
+            print("\n" + "=" * 80)
+            print("⚠️  Training completed but upload failed")
+            print("=" * 80)
     
-    # Use local base model (don't download - that's only for updates after aggregation!)
-    model_path = BASE_MODEL_PATH
-    
-    if not os.path.exists(model_path):
-        print(f"  ❌ Local base model not found at: {model_path}")
-        print(f"  ℹ️  Please ensure base model exists before training.")
-        return False
-    
-    print(f"\n[5/6] Using local base model: {model_path}")
-    
-    # Load model
-    if not client.load_model(model_path):
-        return False
-    
-    # Train on local data
-    client.train_local_model(X_train, y_train)
-    
-    # Save trained weights
-    weights_path = client.save_weights()
-    
-    # Upload to server
-    success = client.upload_weights_to_server(weights_path, num_samples=len(X_train))
-    
-    if success:
-        print("\n" + "=" * 80)
-        print("✅ FEDERATED LEARNING ROUND COMPLETE")
-        print("=" * 80)
-    
-    return success
+    except Exception as e:
+        print(f"\n❌ FL Training Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     run_fl_training()

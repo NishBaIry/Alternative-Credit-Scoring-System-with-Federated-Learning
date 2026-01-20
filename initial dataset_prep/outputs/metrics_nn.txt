@@ -1,0 +1,46 @@
+================================================================================
+ALTERNATIVE CREDIT SCORING - NEURAL NETWORK EVALUATION
+================================================================================
+
+MODEL ARCHITECTURE:
+  Primary Label: default_flag (0=good, 1=default)
+  Output: P(default) via sigmoid neuron
+  Loss: Binary Cross-Entropy
+  Features: 46 columns
+
+CLASSIFICATION METRICS:
+  Accuracy:  0.7792 (77.92%)
+  Precision: 0.9651 (96.51%)
+  Recall:    0.7793 (77.93%)
+  F1-Score:  0.8623
+  ROC-AUC:   0.8675
+
+CONFUSION MATRIX:
+  True Negatives (TN):     904
+  False Positives (FP):    257
+  False Negatives (FN):  2,010
+  True Positives (TP):   7,097
+
+LOSS METRICS:
+  Training Loss:   0.0980
+  Validation Loss: 0.4134
+
+ALTERNATIVE CREDIT SCORE (300-900):
+  Formula: alt_score = 300 + 600 × (1 - P(default))
+  Mean:   504.3
+  Median: 483.0
+  Range:  [300, 900]
+
+BENCHMARK COMPARISON (CIBIL Score):
+  Pearson Correlation:  0.5666
+  Spearman Correlation: 0.5712
+
+DEFAULT RATE BY ALTERNATIVE SCORE BAND:
+  300-399:  99.0% (3,759/3,798)
+  400-499:  96.6% (1,486/1,539)
+  500-599:  91.9% (1,843/2,005)
+  600-699:  84.8% (1,080/1,274)
+  700-799:  68.7% (  743/1,081)
+  800-900:  34.3% (  196/  571)
+
+================================================================================

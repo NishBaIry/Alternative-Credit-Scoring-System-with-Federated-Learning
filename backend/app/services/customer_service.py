@@ -1,18 +1,21 @@
 # customer_service.py
-# Business logic for customer management operations.
+# Business logic for customer management operations using SQLite.
 # Functions:
 # - get_customer_list(bank_id, filters): returns paginated customer list
 # - get_customer_detail(bank_id, customer_id): returns full customer profile + score
 # - update_customer(bank_id, customer_id, data): updates editable fields
-# - create_customer(bank_id, data): adds new customer to dataset
+# - score_customer(bank_id, customer_id): computes and updates alt_score
 # Abstracts DB operations from API routes, making code cleaner and testable.
 
 from typing import List, Dict, Optional
-import pandas as pd
+import logging
 from app.core.db import db_manager
+from app.services.nn_scoring_service import get_scoring_service
+
+logger = logging.getLogger(__name__)
 
 class CustomerService:
-    """Service for customer-related operations."""
+    """Service for customer-related operations using SQLite."""
     
     def __init__(self, bank_id: str):
         self.bank_id = bank_id
@@ -21,34 +24,38 @@ class CustomerService:
         self, 
         skip: int = 0, 
         limit: int = 100,
-        risk_band: Optional[str] = None
+        filters: Optional[Dict] = None
     ) -> Dict:
         """
-        Get paginated list of customers.
+        Get paginated list of customers from SQLite.
         """
-        df = db_manager.load_customers(self.bank_id)
+        customers, total = db_manager.get_customers_paginated(
+            self.bank_id, skip, limit, filters
+        )
         
-        if risk_band:
-            df = df[df['risk_band'] == risk_band]
-        
-        total = len(df)
-        customers = df.iloc[skip:skip + limit].to_dict('records')
+        # Remove password field from results
+        for customer in customers:
+            if 'password' in customer:
+                del customer['password']
         
         return {
             "total": total,
             "customers": customers,
-            "page": skip // limit + 1,
+            "page": skip // limit + 1 if limit > 0 else 1,
             "page_size": limit
         }
     
     def get_customer_detail(self, customer_id: str) -> Optional[Dict]:
         """
-        Get detailed information for a specific customer.
+        Get detailed information for a specific customer from SQLite.
         """
         customer = db_manager.get_customer(self.bank_id, customer_id)
         
         if customer:
-            # TODO: Add score history, factors, etc.
+            # Remove password for security
+            if 'password' in customer:
+                del customer['password']
+            
             return {
                 **customer,
                 "score_history": [],
@@ -59,43 +66,55 @@ class CustomerService:
     
     def update_customer(self, customer_id: str, update_data: Dict) -> Dict:
         """
-        Update customer information.
+        Update customer information in SQLite.
         Only allows editing non-sensitive fields.
         """
-        df = db_manager.load_customers(self.bank_id)
+        # Filter to allowed fields only
+        allowed_fields = ['monthly_income', 'dti', 'loan_amount', 'loan_duration_months']
+        filtered_updates = {k: v for k, v in update_data.items() if k in allowed_fields}
         
-        # Find customer
-        mask = df['customer_id'] == customer_id
-        if not mask.any():
-            raise ValueError(f"Customer {customer_id} not found")
+        if not filtered_updates:
+            raise ValueError("No valid fields to update")
         
-        # Update allowed fields
-        allowed_fields = ['email', 'phone', 'marital_status', 'dependents']
-        for field in allowed_fields:
-            if field in update_data:
-                df.loc[mask, field] = update_data[field]
+        success = db_manager.update_customer(self.bank_id, customer_id, filtered_updates)
         
-        # Save back
-        db_manager.save_customers(self.bank_id, df)
+        if not success:
+            raise ValueError(f"Customer {customer_id} not found or update failed")
         
         return {"message": "Customer updated successfully"}
     
-    def create_customer(self, customer_data: Dict) -> Dict:
+    def score_customer(self, customer_id: str) -> Dict:
         """
-        Create a new customer record.
+        Score a customer and update their alt_score in the database.
+        Returns the scoring result.
         """
-        df = db_manager.load_customers(self.bank_id)
+        # Get customer data from database
+        customer = db_manager.get_customer(self.bank_id, customer_id)
         
-        # Add new customer
-        new_customer = pd.DataFrame([customer_data])
-        df = pd.concat([df, new_customer], ignore_index=True)
+        if not customer:
+            raise ValueError(f"Customer {customer_id} not found")
         
-        # Save
-        db_manager.save_customers(self.bank_id, df)
+        # Get scoring service
+        service = get_scoring_service()
+        
+        # Predict score
+        alt_score, risk_band, p_default = service.predict_score(customer)
+        
+        # Update alt_score in database
+        db_manager.update_customer(
+            self.bank_id, 
+            customer_id, 
+            {'credit_score': alt_score}
+        )
+        
+        logger.info(f"Scored customer {customer_id}: alt_score={alt_score}, risk={risk_band}")
         
         return {
-            "message": "Customer created successfully",
-            "customer_id": customer_data['customer_id']
+            "customer_id": customer_id,
+            "alt_score": alt_score,
+            "credit_score": alt_score,
+            "risk_band": risk_band,
+            "default_probability": round(p_default, 4)
         }
     
     def search_customers(self, query: str) -> List[Dict]:

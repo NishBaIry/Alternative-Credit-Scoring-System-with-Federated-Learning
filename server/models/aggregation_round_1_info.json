@@ -1,6 +1,6 @@
 {
   "round": 1,
-  "timestamp": "20260119_014957",
+  "timestamp": "20260120_205954",
   "num_clients": 1,
   "client_ids": [
     "bank_a"
@@ -8,7 +8,7 @@
   "client_samples": {
     "bank_a": 35000
   },
-  "model_path": "models/global_model_round_1_20260119_014957.h5",
+  "model_path": "models/global_model_round_1_20260120_205954.h5",
   "validation": {
     "enabled": true,
     "old_auc": null,

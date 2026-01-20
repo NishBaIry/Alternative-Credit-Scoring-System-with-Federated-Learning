@@ -3,7 +3,7 @@
   "client_name": "Bank A",
   "upload_type": "full_weights",
   "num_samples": 35000,
-  "timestamp": "2026-01-19T01:49:57.424504",
+  "timestamp": "2026-01-20T20:59:54.532170",
   "epochs": 10,
   "batch_size": 256,
   "learning_rate": 0.001

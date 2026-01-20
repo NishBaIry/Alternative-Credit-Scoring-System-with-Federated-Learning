@@ -18,29 +18,35 @@ logger = logging.getLogger(__name__)
 async def score_features(features: dict):
     """
     Score a set of features using the neural network model.
-    Uses the active FL-trained model (automatically updated by FL downloads).
-    Also appends the scored application to fl_dataset.csv for next FL round.
+    Computes alt_score = 300 + 600 * (1 - p_default).
     """
     try:
         result = predict_credit_score(features)
-        
-        # Append to fl_dataset.csv for next FL training round
-        # Add default_flag based on score (simple rule: score < 600 = high risk = default=1)
-        application_data = features.copy()
-        
-        # Determine default_flag based on score (this should be actual repayment outcome in production)
-        # For now, use a simple threshold as proxy
-        credit_score = result.get('credit_score', 650)
-        application_data['default_flag'] = 1 if credit_score < 600 else 0
-        
-        # Append to FL dataset
-        if append_to_fl_dataset(application_data):
-            logger.info(f"✅ Application added to FL dataset (score: {credit_score})")
-        else:
-            logger.warning("⚠️  Failed to append application to FL dataset")
-        
         return result
     except Exception as e:
+        logger.error(f"Scoring error: {e}")
+        raise HTTPException(status_code=500, detail=f"Scoring error: {str(e)}")
+
+@router.post("/score/customer/{customer_id}")
+async def score_customer(customer_id: str, bank_id: str = "bank_a"):
+    """
+    Score a specific customer from the database.
+    Retrieves customer data from SQLite, scores it, and updates alt_score in DB.
+    """
+    try:
+        from app.services.customer_service import CustomerService
+        
+        service = CustomerService(bank_id)
+        result = service.score_customer(customer_id)
+        
+        return {
+            "status": "success",
+            **result
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error scoring customer: {e}")
         raise HTTPException(status_code=500, detail=f"Scoring error: {str(e)}")
 
 @router.get("/score/explain")
