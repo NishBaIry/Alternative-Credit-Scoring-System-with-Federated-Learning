@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Search, 
   X, 
   ChevronLeft, 
   ChevronRight,
-  Eye,
   Shield,
   Loader2
 } from 'lucide-react';
 
-const API_URL = 'http://localhost:8002'; // Placeholder for demo
+const API_URL = 'http://localhost:8002';
 
 const StaffCustomerList = () => {
+  const navigate = useNavigate();
+  
   const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [limit] = useState(100);
@@ -39,15 +41,14 @@ const StaffCustomerList = () => {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `${API_URL}/api/staff/customers?skip=${page * limit}&limit=${limit}`
-      );
+      const response = await fetch(`${API_URL}/api/staff/customers?skip=${page * limit}&limit=${limit}`);
       const data = await response.json();
       setCustomers(data.customers || []);
       setTotal(data.total || 0);
     } catch (error) {
       console.error('Failed to fetch customers:', error);
       setCustomers([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -62,8 +63,8 @@ const StaffCustomerList = () => {
     setSearching(true);
     try {
       const response = await fetch(`${API_URL}/api/staff/customers/${searchQuery.trim()}`);
-      if (response.ok) {
-        const data = await response.json();
+      const data = await response.json();
+      if (data.customer) {
         setCustomers([data.customer]);
         setTotal(1);
       } else {
@@ -86,14 +87,13 @@ const StaffCustomerList = () => {
   };
 
   const handleViewCustomer = (customerId) => {
-    console.log('Navigate to:', `/staff/customers/${customerId}`);
-    // Replace with your navigation logic
+    navigate(`/staff/customers/${customerId}`);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-blue-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-lg border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -105,7 +105,7 @@ const StaffCustomerList = () => {
                 <p className="text-sm text-gray-500">View and manage customer accounts</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl">
+            <div className="flex items-center gap-2 px-4 py-2 bg-purple-100 rounded-xl">
               <Users className="w-4 h-4 text-purple-600" />
               <span className="text-sm font-semibold text-purple-900">
                 Total: {total} customers
@@ -121,7 +121,7 @@ const StaffCustomerList = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 shadow-sm mb-6"
+          className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm mb-6"
         >
           <div className="flex gap-4">
             <div className="flex-1 relative">
@@ -182,7 +182,7 @@ const StaffCustomerList = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="bg-white/80 backdrop-blur-sm rounded-2xl p-12 border border-gray-200 shadow-sm text-center"
+            className="bg-white rounded-2xl p-12 border border-gray-200 shadow-sm text-center"
           >
             <Loader2 className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
             <div className="text-gray-600 font-medium">Loading customers...</div>
@@ -193,11 +193,11 @@ const StaffCustomerList = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.5 }}
-              className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
             >
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gradient-to-r from-purple-50 to-blue-50">
+                  <thead className="bg-gray-50">
                     <tr>
                       <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Customer ID</th>
                       <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Name</th>
@@ -211,7 +211,7 @@ const StaffCustomerList = () => {
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05, duration: 0.3 }}
-                        className="border-b border-gray-100 hover:bg-purple-50/50 transition-colors"
+                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                       >
                         <td className="py-4 px-6 font-mono text-sm text-gray-900 font-medium">
                           {customer.customer_id}
@@ -222,10 +222,10 @@ const StaffCustomerList = () => {
                         <td className="py-4 px-6">
                           <button
                             onClick={() => handleViewCustomer(customer.customer_id)}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-300 hover:scale-105"
+                            className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium transition-colors group"
                           >
-                            <Eye className="w-4 h-4" />
                             <span>View</span>
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                           </button>
                         </td>
                       </motion.tr>
@@ -245,18 +245,18 @@ const StaffCustomerList = () => {
                 <button
                   onClick={() => setPage(p => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-white hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                   <ChevronLeft className="w-5 h-5" />
                   <span>Previous</span>
                 </button>
-                <span className="text-sm font-medium text-gray-600 bg-white/80 backdrop-blur-sm px-6 py-3 rounded-xl border border-gray-200">
+                <span className="text-sm font-medium text-gray-600 bg-white px-6 py-3 rounded-xl border border-gray-200">
                   Page {page + 1} of {Math.ceil(total / limit)}
                 </span>
                 <button
                   onClick={() => setPage(p => p + 1)}
                   disabled={(page + 1) * limit >= total}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-white hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                   <span>Next</span>
                   <ChevronRight className="w-5 h-5" />
