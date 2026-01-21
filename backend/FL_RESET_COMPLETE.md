@@ -59,6 +59,6 @@ The new base model was trained on the full dataset with:
 - **46 features** (behavior + capacity metrics)
 - **3 categorical encoders** (gender, marital_status, education)
 - **StandardScaler** preprocessing
-- **Alternative Credit Score**: `300 + 600 * (1 - p_default)`
+- **Alternative Credit Score**: Log-Odds formula `600 + 50 * log((1-p)/p)` (range 300-900)
 
 Ready to start federated learning! 🚀

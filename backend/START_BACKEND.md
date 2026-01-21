@@ -5,7 +5,7 @@
 All backend components have been updated to use:
 - **SQLite databases**: `data/bank_a.db` and `data/bank_b.db` (35,000 customers each)
 - **Trained NN model**: `models/model.h5` with scaler and encoders
-- **Alternative Credit Score**: Formula `300 + 600 * (1 - p_default)`
+- **Alternative Credit Score**: Log-Odds formula `600 + 50 * log((1-p)/p)` (range 300-900)
 
 ## 🚀 Start the Backend
 

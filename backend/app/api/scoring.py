@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 async def score_features(features: dict):
     """
     Score a set of features using the neural network model.
-    Computes alt_score = 300 + 600 * (1 - p_default).
+    Uses Log-Odds transformation: alt_score = 600 + 50 * log((1-p)/p)
     """
     try:
         result = predict_credit_score(features)

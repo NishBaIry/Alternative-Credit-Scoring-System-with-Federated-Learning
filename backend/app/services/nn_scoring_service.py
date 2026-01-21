@@ -2,7 +2,10 @@
 Neural Network Scoring Service - Uses trained model for credit scoring
 Loads model.h5, scaler.pkl, and encoders.pkl from models directory
 Provides credit score predictions using proper feature pipeline
-Alternative Credit Score: 300 + 600 * (1 - p_default)
+Alternative Credit Score: Log-Odds transformation (industry standard)
+  - Formula: 600 + 50 * log((1-p_default)/p_default)
+  - Range: 300-900
+  - Centered at 600 (p_default=0.5)
 """
 
 import os
@@ -201,8 +204,18 @@ class NeuralNetworkScoringService:
             with tf.device('/CPU:0'):
                 p_default = float(self.model.predict(X, verbose=0)[0][0])
 
-            # Convert to Alternative Credit Score: 300 + 600 * (1 - p_default)
-            alt_score = int(round(300 + 600 * (1 - p_default)))
+            # Convert to Alternative Credit Score using Log-Odds transformation (industry standard)
+            # This provides better score distribution across the 300-900 range
+            import math
+
+            # Clamp p_default to avoid log(0) issues
+            p_clamped = max(0.001, min(0.999, p_default))
+
+            # Calculate log-odds: log((1-p)/p)
+            log_odds = math.log((1 - p_clamped) / p_clamped)
+
+            # Scale to credit score range: centered at 600, with 50 points per unit log-odds
+            alt_score = int(round(600 + 50 * log_odds))
 
             # Clamp to valid range
             alt_score = max(300, min(900, alt_score))

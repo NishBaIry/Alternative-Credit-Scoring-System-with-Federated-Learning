@@ -7,7 +7,6 @@
     "bank-a": "cd frontend-bank-a && npm run dev",
     "bank-b": "cd frontend-bank-b && npm run dev",
     "backend": "cd backend && uvicorn app.main:app --reload",
-    "dev": "concurrently \"npm run client\" \"npm run bank-a\" \"npm run bank-b\" \"npm run backend\" --names \"CLIENT,BANK-A,BANK-B,BACKEND\" --prefix-colors \"cyan,green,yellow,magenta\"",
     "install-all": "cd frontend-client && npm install && cd ../frontend-bank-a && npm install && cd ../frontend-bank-b && npm install && cd ../backend && pip install -r requirements.txt",
     "test-frontend-client": "cd frontend-client && npm test",
     "test-frontend-bank-a": "cd frontend-bank-a && npm test",

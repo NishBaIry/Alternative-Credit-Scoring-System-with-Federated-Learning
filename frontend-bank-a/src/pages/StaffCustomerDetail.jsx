@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, 
-  User, 
-  DollarSign, 
-  CreditCard, 
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft,
+  User,
+  DollarSign,
+  CreditCard,
   Smartphone,
   Loader2,
   AlertCircle
 } from 'lucide-react';
 
-const API_URL = 'http://localhost:8002';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // ScoreGauge Component (unchanged)
 const ScoreGauge = ({ score, minScore = 300, maxScore = 900 }) => {
@@ -83,53 +84,32 @@ const ScoreGauge = ({ score, minScore = 300, maxScore = 900 }) => {
 };
 
 const StaffCustomerDetail = () => {
-  const customerId = '00000001'; // Placeholder
+  const { customerId } = useParams();
+  const navigate = useNavigate();
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchCustomer();
+    if (customerId) {
+      fetchCustomer();
+    }
   }, [customerId]);
 
   const fetchCustomer = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // Simulating API call with sample data
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setCustomer({
-        customer_id: '00000001',
-        name: 'Rajesh Kumar',
-        alt_score: 745,
-        age: 32,
-        gender: 'Male',
-        marital_status: 'Married',
-        education: 'Graduate',
-        region: 'Urban',
-        home_ownership: 'Owned',
-        dependents: 2,
-        monthly_income: 75000,
-        annual_income: 900000,
-        dti: 35.5,
-        total_dti: 42.3,
-        monthly_debt_payments: 26625,
-        net_worth: 1500000,
-        tot_enq: 5,
-        enq_L3m: 1,
-        enq_L6m: 2,
-        enq_L12m: 4,
-        num_30dpd: 0,
-        num_60dpd: 0,
-        max_delinquency_level: 0,
-        utility_bill_score: 85,
-        upi_txn_count_avg: 45.5,
-        upi_total_spend_month_avg: 32000,
-        upi_merchant_diversity: 0.75,
-        upi_spend_volatility: 0.32,
-        upi_failed_txn_rate: 2.5,
-        upi_essentials_share: 62.3
-      });
-    } catch (error) {
-      console.error('Failed to fetch customer:', error);
+      const response = await fetch(`${API_URL}/api/staff/customers/${customerId}`);
+      if (!response.ok) {
+        throw new Error(`Customer not found: ${response.statusText}`);
+      }
+      const data = await response.json();
+      setCustomer(data.customer || data);
+    } catch (err) {
+      console.error('Failed to fetch customer:', err);
+      setError(err.message);
+      setCustomer(null);
     } finally {
       setLoading(false);
     }
@@ -143,8 +123,7 @@ const StaffCustomerDetail = () => {
   };
 
   const handleBackClick = () => {
-    console.log('Navigate back to customer list');
-    // Replace with: navigate('/staff/customers')
+    navigate('/staff/customers');
   };
 
   if (loading) {

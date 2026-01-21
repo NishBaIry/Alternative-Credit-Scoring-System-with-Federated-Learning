@@ -13,7 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8002';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // ScoreGauge Component (unchanged)
 const ScoreGauge = ({ score, minScore = 300, maxScore = 900 }) => {
