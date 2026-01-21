@@ -1,11 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Shield, Zap, Briefcase, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const LandingPage = () => {
+  const navigate = useNavigate();
+  
   const handleStaffLogin = () => {
-    // Navigate to staff login - implement your routing logic here
-    console.log('Navigate to staff login');
+    navigate('/staff/login');
   };
 
   return (

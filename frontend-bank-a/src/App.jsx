@@ -5,7 +5,8 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import PrivacyBanner from './components/PrivacyBanner';
 
-// Pages - Bank A Staff Portal Only
+// Pages
+import LandingPage from './pages/LandingPage';
 import StaffLogin from './pages/StaffLogin';
 import StaffDashboard from './pages/StaffDashboard';
 import StaffCustomerList from './pages/StaffCustomerList';
@@ -23,7 +24,7 @@ function App() {
           
           <main className="flex-grow">
             <Routes>
-              <Route path="/" element={<Navigate to="/staff/login" replace />} />
+              <Route path="/" element={<LandingPage />} />
               
               {/* Bank A Staff Routes */}
               <Route path="/staff/login" element={<StaffLogin />} />
