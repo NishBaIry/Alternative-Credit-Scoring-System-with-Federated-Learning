@@ -14,7 +14,7 @@ const StaffLogin = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login({ username, password, bankId: 'bank_a' }, 'staff');
+      await login({ username, password, bankId: import.meta.env.VITE_BANK_ID || 'bank_a' }, 'staff');
       navigate('/staff/dashboard');
     } catch (error) {
       console.error('Login failed:', error);

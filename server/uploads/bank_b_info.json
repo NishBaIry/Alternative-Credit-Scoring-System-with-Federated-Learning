@@ -1,0 +1,10 @@
+{
+  "client_id": "bank_b",
+  "client_name": "Bank B",
+  "upload_type": "full_weights",
+  "num_samples": 35000,
+  "timestamp": "2026-01-22T00:13:48.092397",
+  "epochs": 10,
+  "batch_size": 256,
+  "learning_rate": 0.001
+}

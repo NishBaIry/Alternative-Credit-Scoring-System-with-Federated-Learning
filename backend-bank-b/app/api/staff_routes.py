@@ -13,13 +13,18 @@ from typing import Optional
 from app.services.customer_service import CustomerService
 from app.services.nn_scoring_service import get_scoring_service
 from app.services.new_applications_service import get_new_applications_service
+from app.config import settings
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Get default bank_id from config
+DEFAULT_BANK_ID = settings.BANK_ID
+
 @router.get("/customers")
-async def list_customers(bank_id: str = "bank_a", skip: int = 0, limit: int = 100, min_score: Optional[int] = None):
+async def list_customers(bank_id: str = None, skip: int = 0, limit: int = 100, min_score: Optional[int] = None):
+    bank_id = bank_id or DEFAULT_BANK_ID
     """
     List all customers for the bank from SQLite.
     Supports pagination and filtering.
@@ -37,10 +42,11 @@ async def list_customers(bank_id: str = "bank_a", skip: int = 0, limit: int = 10
         raise HTTPException(status_code=500, detail=f"Failed to load customers: {str(e)}")
 
 @router.get("/customers/{customer_id}")
-async def get_customer_detail(customer_id: str, bank_id: str = "bank_a"):
+async def get_customer_detail(customer_id: str, bank_id: str = None):
     """
     Get detailed information for a specific customer from SQLite.
     """
+    bank_id = bank_id or DEFAULT_BANK_ID
     try:
         service = CustomerService(bank_id)
         customer = service.get_customer_detail(customer_id)
@@ -59,10 +65,11 @@ async def get_customer_detail(customer_id: str, bank_id: str = "bank_a"):
         raise HTTPException(status_code=500, detail=f"Failed to get customer: {str(e)}")
 
 @router.patch("/customers/{customer_id}")
-async def update_customer(customer_id: str, update_data: dict, bank_id: str = "bank_a"):
+async def update_customer(customer_id: str, update_data: dict, bank_id: str = None):
     """
     Update non-sensitive customer information in SQLite.
     """
+    bank_id = bank_id or DEFAULT_BANK_ID
     try:
         service = CustomerService(bank_id)
         result = service.update_customer(customer_id, update_data)
@@ -74,11 +81,16 @@ async def update_customer(customer_id: str, update_data: dict, bank_id: str = "b
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/applications/score")
-async def score_application(application_data: dict, bank_id: str = "bank_a"):
+async def score_application(application_data: dict, bank_id: str = None):
+    bank_id = bank_id or DEFAULT_BANK_ID
     """
-    Score a new loan application using the local model and save to new_applications.db.
+    Score a loan application using the local model.
+    For existing customers: update their record in bank database.
+    For new customers: save to new_applications.db.
     """
     try:
+        customer_id = application_data.get('customer_id')
+        
         # Score the application
         scoring_service = get_scoring_service()
         alt_score, risk_band, p_default = scoring_service.predict_score(application_data)
@@ -87,9 +99,30 @@ async def score_application(application_data: dict, bank_id: str = "bank_a"):
         application_data['alt_score'] = alt_score
         application_data['credit_score'] = alt_score
 
-        # Save to new_applications.db
-        new_apps_service = get_new_applications_service()
-        saved = new_apps_service.save_application(application_data)
+        # Check if customer exists in bank database
+        from app.core.db import db_manager
+        try:
+            existing_customer = db_manager.get_customer(bank_id, customer_id)
+            if existing_customer is not None:
+                # Update existing customer in bank database
+                update_data = {
+                    'credit_score': alt_score,
+                    'loan_amount': application_data.get('loan_amount'),
+                    'loan_duration_months': application_data.get('loan_duration_months'),
+                }
+                db_manager.update_customer(bank_id, customer_id, update_data)
+                saved = True
+                is_new = False
+            else:
+                # Save as new application
+                new_apps_service = get_new_applications_service()
+                saved = new_apps_service.save_application(application_data)
+                is_new = True
+        except Exception:
+            # If customer doesn't exist, save as new application
+            new_apps_service = get_new_applications_service()
+            saved = new_apps_service.save_application(application_data)
+            is_new = True
 
         return {
             "status": "success",
@@ -98,7 +131,9 @@ async def score_application(application_data: dict, bank_id: str = "bank_a"):
             "risk_band": risk_band,
             "default_probability": round(p_default, 4),
             "recommendation": "Approve" if alt_score >= 650 else "Review" if alt_score >= 500 else "Decline",
-            "saved": saved
+            "saved": saved,
+            "is_new_customer": is_new,
+            "customer_id": customer_id
         }
     except Exception as e:
         logger.error(f"Failed to score application: {e}")
@@ -167,10 +202,11 @@ async def get_new_applications_count():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/applications/next-customer-id")
-async def get_next_customer_id(bank_id: str = "bank_a"):
+async def get_next_customer_id(bank_id: str = None):
     """
-    Get the next customer ID by counting total customers in bank_a.db + new_applications.db.
+    Get the next customer ID by counting total customers in bank database + new_applications.db.
     """
+    bank_id = bank_id or "bank_b"  # Default to bank_b for this backend
     try:
         from app.core.db import db_manager
 

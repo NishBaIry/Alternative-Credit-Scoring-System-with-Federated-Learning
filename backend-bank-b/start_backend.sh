@@ -63,6 +63,10 @@ else
     echo "✅ FL configuration found: .env.fl"
 fi
 
+# Set XLA flags for GPU/CUDA (fix libdevice issue)
+export XLA_FLAGS=--xla_gpu_cuda_data_dir=$CONDA_PREFIX
+echo "✅ XLA_FLAGS set for CUDA: $XLA_FLAGS"
+
 # Get host and port from arguments or use defaults
 HOST="${1:-127.0.0.1}"
 PORT="${2:-8000}"

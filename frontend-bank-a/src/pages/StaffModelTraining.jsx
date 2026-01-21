@@ -183,7 +183,7 @@ const StaffModelTraining = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          bank_id: 'bank_a',
+          bank_id: import.meta.env.VITE_BANK_ID || 'bank_a',
           epochs: 10,
           batch_size: 256,
           learning_rate: 0.001

@@ -17,6 +17,10 @@ import shutil
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Set XLA flags for GPU/CUDA before loading TensorFlow (fix libdevice issue)
+if 'XLA_FLAGS' not in os.environ and 'CONDA_PREFIX' in os.environ:
+    os.environ['XLA_FLAGS'] = f'--xla_gpu_cuda_data_dir={os.environ["CONDA_PREFIX"]}'
+
 # Suppress TensorFlow warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 tf.get_logger().setLevel('ERROR')
@@ -179,13 +183,29 @@ def evaluate_model_accuracy(model, dataset_path):
             print_warning(f"Validation dataset not found at {dataset_path}")
             return None
         
+        # Feature columns (must match training - 45 features)
+        FEATURE_COLS = [
+            # Demographics
+            'age', 'gender', 'marital_status', 'education', 'dependents', 'home_ownership', 'region',
+            # Income & Capacity
+            'monthly_income', 'annual_income', 'job_type', 'job_tenure_years', 'net_monthly_income',
+            'monthly_debt_payments', 'dti', 'total_dti',
+            'savings_balance', 'checking_balance', 'total_assets', 'total_liabilities', 'net_worth',
+            # Loan Request
+            'loan_amount', 'loan_duration_months', 'loan_purpose',
+            'base_interest_rate', 'interest_rate', 'monthly_loan_payment',
+            # Traditional Credit Behavior
+            'tot_enq', 'enq_L3m', 'enq_L6m', 'enq_L12m', 'time_since_recent_enq',
+            'num_30dpd', 'num_60dpd', 'max_delinquency_level',
+            'CC_utilization', 'PL_utilization', 'HL_flag', 'GL_flag',
+            'utility_bill_score',
+            # UPI Alternative Data
+            'upi_txn_count_avg', 'upi_txn_count_std', 'upi_total_spend_month_avg',
+            'upi_merchant_diversity', 'upi_spend_volatility', 'upi_failed_txn_rate', 'upi_essentials_share',
+        ]
+        
         # Load validation data
         df = pd.read_csv(dataset_path)
-        
-        # Remove authentication, ID, and non-feature columns
-        remove_cols = ['customer_id', 'password', 'data_source', 'credit_score',
-                       'credit_score_original', 'good_borrower', 'alt_score']
-        df = df.drop(columns=[col for col in remove_cols if col in df.columns])
         
         # Separate features and target
         if 'default_flag' not in df.columns:
@@ -193,23 +213,35 @@ def evaluate_model_accuracy(model, dataset_path):
             return None
         
         y = df['default_flag'].astype(int).values
-        X = df.drop(columns=['default_flag'])
+        
+        # Select only the required feature columns (exclude customer_id, password, etc.)
+        X = df[FEATURE_COLS].copy()
         
         # Handle categorical and numerical columns
         categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
         numerical_cols = X.select_dtypes(include=[np.number]).columns.tolist()
         
-        # Fill missing values
+        # Fill missing values in numerical columns
         for col in numerical_cols:
             if X[col].isnull().any():
+                # Use median, fallback to 0 if all NaN
                 median_val = X[col].median()
-                X[col].fillna(median_val, inplace=True)
+                if pd.isna(median_val):
+                    X[col].fillna(0, inplace=True)
+                else:
+                    X[col].fillna(median_val, inplace=True)
         
+        # Fill missing values in categorical columns
         for col in categorical_cols:
             if X[col].isnull().any():
                 mode_val = X[col].mode()
                 if len(mode_val) > 0:
                     X[col].fillna(mode_val[0], inplace=True)
+                else:
+                    X[col].fillna('Unknown', inplace=True)
+        
+        # Replace inf values before encoding
+        X = X.replace([np.inf, -np.inf], [1e10, -1e10])
         
         # Encode categorical variables
         label_encoders = {}
@@ -218,10 +250,12 @@ def evaluate_model_accuracy(model, dataset_path):
             X[col] = le.fit_transform(X[col].astype(str))
             label_encoders[col] = le
         
-        # Scale features
+        # Scale features with additional safety checks
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
-        X_scaled = np.nan_to_num(X_scaled, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # Replace any remaining NaN/inf values after scaling
+        X_scaled = np.nan_to_num(X_scaled, nan=0.0, posinf=1e10, neginf=-1e10)
         
         # Make predictions
         y_pred_proba = model.predict(X_scaled, verbose=0)
@@ -632,6 +666,33 @@ def perform_aggregation():
         info_file = f"{MODELS_FOLDER}/aggregation_round_{fed_avg.current_round}_info.json"
         with open(info_file, 'w') as f:
             json.dump(aggregation_info, f, indent=2)
+        
+        # Append to training history text file
+        history_file = f"{MODELS_FOLDER}/training_history.txt"
+        with open(history_file, 'a') as f:
+            if fed_avg.current_round == 1:
+                f.write("="*70 + "\n")
+                f.write("FEDERATED LEARNING TRAINING HISTORY\n")
+                f.write("="*70 + "\n\n")
+            
+            f.write(f"Round {fed_avg.current_round} - {timestamp}\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Clients: {', '.join(client_ids)} ({len(client_ids)} total)\n")
+            f.write(f"Total Samples: {sum(client_samples_list)}\n")
+            
+            if old_metrics and new_metrics:
+                f.write(f"\nPerformance Comparison:\n")
+                f.write(f"  OLD Model - AUC: {old_auc:.4f} | Accuracy: {old_metrics['accuracy']:.4f} | F1: {old_metrics['f1']:.4f}\n")
+                f.write(f"  NEW Model - AUC: {new_auc:.4f} | Accuracy: {new_metrics['accuracy']:.4f} | F1: {new_metrics['f1']:.4f}\n")
+                f.write(f"  Change    - AUC: {(new_auc - old_auc):+.4f} | Accuracy: {(new_metrics['accuracy'] - old_metrics['accuracy']):+.4f} | F1: {(new_metrics['f1'] - old_metrics['f1']):+.4f}\n")
+            elif new_metrics:
+                f.write(f"\nModel Performance:\n")
+                f.write(f"  AUC: {new_auc:.4f} | Accuracy: {new_metrics['accuracy']:.4f} | F1: {new_metrics['f1']:.4f}\n")
+            
+            f.write(f"\nModel Status: {'✓ SAVED' if should_replace else '✗ NOT SAVED (degraded)'}\n")
+            if should_replace:
+                f.write(f"Saved to: {os.path.basename(round_model_path)}\n")
+            f.write("\n" + "="*70 + "\n\n")
         
         print_header(f"✅ AGGREGATION COMPLETE - Round {fed_avg.current_round}", "=")
         

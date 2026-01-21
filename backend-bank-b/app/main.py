@@ -5,6 +5,7 @@
 # Runs with: uvicorn app.main:app --reload
 # This is the central hub connecting all API modules.
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,7 +18,10 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    allow_origins=[
+        os.getenv("FRONTEND_URL", "http://localhost:3002"),
+        "http://localhost:3000", "http://localhost:3001", "http://localhost:3002"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

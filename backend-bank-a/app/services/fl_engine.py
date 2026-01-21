@@ -20,7 +20,8 @@ class FederatedLearningEngine:
         self.privacy_budget = 1.0
         self.epsilon_per_round = 0.1
         self.current_round = 0
-        self.fl_server_url = "http://localhost:8001"  # FL server endpoint
+        from app.config import settings
+        self.fl_server_url = settings.FL_SERVER_URL  # FL server endpoint from config
     
     def add_dp_noise(self, weights: np.ndarray, epsilon: float = 0.1) -> np.ndarray:
         """

@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "CashFlow"
 
     # Bank Configuration
-    BANK_ID: str = "bank_a"
-    BANK_NAME: str = "Bank A"
+    BANK_ID: str = os.getenv("BANK_ID", "bank_b")
+    BANK_NAME: str = os.getenv("BANK_NAME", "Bank B")
 
     # Directory Paths
     DATA_DIR: str = "data"
@@ -44,9 +44,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # API Configuration
-    API_HOST: str = "0.0.0.0"
-    API_PORT: int = 8000
-    DEBUG: bool = True
+    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    API_PORT: int = int(os.getenv("API_PORT", "8001"))
+    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
 
     # Federated Learning
     FL_SERVER_URL: str = "http://localhost:5000"

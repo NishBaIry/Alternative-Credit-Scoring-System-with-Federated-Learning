@@ -6,21 +6,37 @@ Updated to match train_neural_network_v2.py pipeline
 
 import os
 import sys
+
+# Set XLA flags for GPU BEFORE importing TensorFlow
+os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=' + os.environ.get('CONDA_PREFIX', '')
+# Suppress TensorFlow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# Add parent directory to path for imports when running as standalone script
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 import requests
 import numpy as np
 import pandas as pd
 import sqlite3
 import tensorflow as tf
 from tensorflow import keras
+
+# Configure GPU memory growth to avoid CUDA initialization conflicts
+try:
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        print(f"GPU memory growth enabled for {len(gpus)} GPU(s)")
+except Exception as e:
+    print(f"GPU configuration warning: {e}")
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 import json
 from datetime import datetime
 import pickle
 from dotenv import load_dotenv
-
-# Set XLA flags for GPU
-os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=' + os.environ.get('CONDA_PREFIX', '')
 
 # Load environment variables
 load_dotenv()
@@ -70,8 +86,7 @@ FEATURE_COLS = [
 
 TARGET_COL = "default_flag"
 
-# Categorical columns that need encoding (only these 3)
-CATEGORICAL_COLS = ['gender', 'marital_status', 'education']
+# Categorical columns will be detected automatically from the data
 
 # Set random seeds
 np.random.seed(42)
@@ -132,20 +147,38 @@ class BankFLClient:
         
         # Handle missing values
         print("\n[2/6] Preprocessing data...")
-        for col in FEATURE_COLS:
-            if X[col].isnull().any():
-                if col in CATEGORICAL_COLS:
-                    X[col].fillna('Unknown', inplace=True)
-                else:
-                    X[col].fillna(0, inplace=True)
         
-        # Encode categorical variables (only the 3 that were encoded in training)
-        print(f"  ✓ Encoding {len(CATEGORICAL_COLS)} categorical features...")
-        for col in CATEGORICAL_COLS:
-            if col in X.columns:
-                le = LabelEncoder()
-                X[col] = le.fit_transform(X[col].astype(str))
-                self.encoders[col] = le
+        # Identify categorical and numerical columns
+        categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
+        numerical_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+        
+        print(f"  • Numerical features: {len(numerical_cols)}")
+        print(f"  • Categorical features: {len(categorical_cols)}")
+        
+        # Handle missing values in numerical columns
+        for col in numerical_cols:
+            if X[col].isnull().any():
+                median_val = X[col].median()
+                X[col].fillna(median_val, inplace=True)
+        
+        # Handle missing values in categorical columns
+        for col in categorical_cols:
+            if X[col].isnull().any():
+                mode_val = X[col].mode()
+                if len(mode_val) > 0:
+                    X[col].fillna(mode_val[0], inplace=True)
+                else:
+                    X[col].fillna('Unknown', inplace=True)
+        
+        # Replace inf values
+        X.replace([np.inf, -np.inf], [1e10, -1e10], inplace=True)
+        
+        # Encode categorical variables (all of them)
+        print(f"  ✓ Encoding {len(categorical_cols)} categorical features...")
+        for col in categorical_cols:
+            le = LabelEncoder()
+            X[col] = le.fit_transform(X[col].astype(str))
+            self.encoders[col] = le
         
         # Scale features
         print("  ✓ Scaling features...")

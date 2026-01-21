@@ -199,7 +199,10 @@ class NewApplicationsService:
             logger.error(f"Error getting application count: {e}")
             return 0
 
-    def merge_applications_to_bank(self, bank_id: str = "bank_a") -> int:
+    def merge_applications_to_bank(self, bank_id: str = None) -> int:
+        """Merge approved applications into bank database."""
+        from app.config import settings
+        bank_id = bank_id or settings.BANK_ID
         """
         Merge all applications from new_applications.db into bank database.
         For existing customers, updates their record. For new customers, inserts.

@@ -75,5 +75,10 @@ echo "Starting FL Server..."
 echo "=========================================="
 echo ""
 
+# Set XLA flags for GPU/CUDA (fix libdevice issue)
+export XLA_FLAGS=--xla_gpu_cuda_data_dir=$CONDA_PREFIX
+echo "✅ XLA_FLAGS set for CUDA: $XLA_FLAGS"
+echo ""
+
 # Start the FL server
 python fl_server.py
