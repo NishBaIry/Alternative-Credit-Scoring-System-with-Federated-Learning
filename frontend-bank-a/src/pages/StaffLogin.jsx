@@ -8,16 +8,22 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BANK_ID, BANK_NAME } from '@/lib/constants';
+import { useAuthContext } from '../context/AuthContext';
 
 const StaffLogin = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
+  const { login } = useAuthContext();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     // TODO: Implement authentication logic with BANK_ID
     console.log('Logging in to', BANK_ID);
+
+    // Set user in auth context
+    await login({ username, bankId: BANK_ID }, 'staff');
+
     navigate('/staff/dashboard');
   };
 

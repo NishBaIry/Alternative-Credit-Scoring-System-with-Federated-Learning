@@ -48,20 +48,39 @@ class CustomerService:
     def get_customer_detail(self, customer_id: str) -> Optional[Dict]:
         """
         Get detailed information for a specific customer from SQLite.
+        Computes alt_score if not present.
         """
         customer = db_manager.get_customer(self.bank_id, customer_id)
-        
+
         if customer:
             # Remove password for security
             if 'password' in customer:
                 del customer['password']
-            
+
+            # Compute alt_score if not present or is 0
+            if not customer.get('alt_score') or customer.get('alt_score') == 0:
+                try:
+                    scoring_service = get_scoring_service()
+                    alt_score, risk_band, p_default = scoring_service.predict_score(customer)
+                    customer['alt_score'] = alt_score
+
+                    # Update in database for future use
+                    db_manager.update_customer(
+                        self.bank_id,
+                        customer_id,
+                        {'alt_score': alt_score}
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to compute alt_score for {customer_id}: {e}")
+                    # Fallback to credit_score if available
+                    customer['alt_score'] = customer.get('credit_score', None)
+
             return {
                 **customer,
                 "score_history": [],
                 "score_factors": []
             }
-        
+
         return None
     
     def update_customer(self, customer_id: str, update_data: Dict) -> Dict:

@@ -21,8 +21,11 @@ from typing import Optional
 import asyncio
 from datetime import datetime
 from app.services.fl_model_poller import start_polling, stop_polling, get_polling_status
+from app.services.new_applications_service import get_new_applications_service
+import logging
 
 load_dotenv('.env.fl')
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -61,21 +64,35 @@ class FLStatusResponse(BaseModel):
 async def trigger_fl_training(request: FLTrainRequest, background_tasks: BackgroundTasks):
     """
     Trigger federated learning training on local bank dataset.
+    First merges new_applications.db into bank_a.db, then runs training.
     Training runs in background and uploads weights to FL server.
     """
     try:
-        # Check if training script exists
+        # Step 1: Merge new applications into bank database
+        logger.info("Checking for new applications to merge...")
+        new_apps_service = get_new_applications_service()
+        merged_count = new_apps_service.merge_applications_to_bank(request.bank_id)
+
+        if merged_count > 0:
+            logger.info(f"Merged {merged_count} new applications into {request.bank_id}.db")
+            # Delete new_applications.db after successful merge
+            new_apps_service.clear_applications()
+            logger.info("new_applications.db deleted after merge")
+        else:
+            logger.info("No new applications to merge")
+
+        # Step 2: Check if training script exists
         if not os.path.exists(FL_TRAINING_SCRIPT):
             raise HTTPException(status_code=500, detail=f"Training script not found: {FL_TRAINING_SCRIPT}")
-        
-        # Set environment variables for training
+
+        # Step 3: Set environment variables for training
         env = os.environ.copy()
         env['FL_EPOCHS'] = str(request.epochs)
         env['FL_BATCH_SIZE'] = str(request.batch_size)
         env['FL_LEARNING_RATE'] = str(request.learning_rate)
         env['BANK_ID'] = request.bank_id
-        
-        # Run training script
+
+        # Step 4: Run training script
         print(f"🚀 Starting FL training for {request.bank_id}...")
         result = subprocess.run(
             [sys.executable, FL_TRAINING_SCRIPT],
@@ -88,12 +105,15 @@ async def trigger_fl_training(request: FLTrainRequest, background_tasks: Backgro
         if result.returncode == 0:
             # Training successful - start polling for new model
             start_polling()
-            
+
+            message = f"FL training completed. {merged_count} new applications merged into dataset." if merged_count > 0 else "FL training completed."
+
             return {
                 "status": "success",
-                "message": "FL training completed and weights uploaded. Polling for new model started.",
+                "message": message,
                 "bank_id": request.bank_id,
                 "epochs": request.epochs,
+                "merged_applications": merged_count,
                 "output": result.stdout[-500:] if len(result.stdout) > 500 else result.stdout,
                 "polling_started": True
             }

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
 from app.services.customer_service import CustomerService
 from app.services.nn_scoring_service import get_scoring_service
+from app.services.new_applications_service import get_new_applications_service
 import logging
 
 router = APIRouter()
@@ -75,22 +76,123 @@ async def update_customer(customer_id: str, update_data: dict, bank_id: str = "b
 @router.post("/applications/score")
 async def score_application(application_data: dict, bank_id: str = "bank_a"):
     """
-    Score a new loan application using the local model.
+    Score a new loan application using the local model and save to new_applications.db.
     """
     try:
+        # Score the application
         scoring_service = get_scoring_service()
         alt_score, risk_band, p_default = scoring_service.predict_score(application_data)
-        
+
+        # Add score to application data
+        application_data['alt_score'] = alt_score
+        application_data['credit_score'] = alt_score
+
+        # Save to new_applications.db
+        new_apps_service = get_new_applications_service()
+        saved = new_apps_service.save_application(application_data)
+
         return {
             "status": "success",
             "alt_score": alt_score,
             "credit_score": alt_score,
             "risk_band": risk_band,
             "default_probability": round(p_default, 4),
-            "recommendation": "Approve" if alt_score >= 650 else "Review" if alt_score >= 600 else "Decline"
+            "recommendation": "Approve" if alt_score >= 650 else "Review" if alt_score >= 500 else "Decline",
+            "saved": saved
         }
     except Exception as e:
         logger.error(f"Failed to score application: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/applications/approve/{customer_id}")
+async def approve_application(customer_id: str):
+    """
+    Approve a pending loan application.
+    """
+    try:
+        new_apps_service = get_new_applications_service()
+        success = new_apps_service.approve_application(customer_id)
+
+        if success:
+            return {
+                "status": "success",
+                "message": f"Application {customer_id} approved",
+                "customer_id": customer_id
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Application {customer_id} not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to approve application: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/applications/reject/{customer_id}")
+async def reject_application(customer_id: str):
+    """
+    Reject a pending loan application.
+    """
+    try:
+        new_apps_service = get_new_applications_service()
+        success = new_apps_service.reject_application(customer_id)
+
+        if success:
+            return {
+                "status": "success",
+                "message": f"Application {customer_id} rejected",
+                "customer_id": customer_id
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Application {customer_id} not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reject application: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/applications/count")
+async def get_new_applications_count():
+    """
+    Get count of pending new applications in new_applications.db.
+    """
+    try:
+        new_apps_service = get_new_applications_service()
+        count = new_apps_service.get_application_count()
+        return {
+            "count": count,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"Failed to get application count: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/applications/next-customer-id")
+async def get_next_customer_id(bank_id: str = "bank_a"):
+    """
+    Get the next customer ID by counting total customers in bank_a.db + new_applications.db.
+    """
+    try:
+        from app.core.db import db_manager
+
+        # Get count from bank database
+        bank_df = db_manager.load_customers(bank_id)
+        bank_count = len(bank_df)
+
+        # Get count from new applications
+        new_apps_service = get_new_applications_service()
+        new_apps_count = new_apps_service.get_application_count()
+
+        # Next ID is total + 1
+        next_id = bank_count + new_apps_count + 1
+        customer_id = f"{next_id:08d}"  # Format: 00000001, 00000002, etc. (8 digits)
+
+        return {
+            "customer_id": customer_id,
+            "total_existing": bank_count + new_apps_count,
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"Failed to get next customer ID: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/model/status")
@@ -98,16 +200,25 @@ async def get_model_status():
     """
     Get current model training status and metrics.
     """
-    # TODO: Implement model status retrieval
-    return {
-        "local_records": 1234,
-        "good_bad_ratio": "70:30",
-        "last_training": "2 days ago",
-        "local_auc": 0.94,
-        "global_round": 12,
-        "global_auc": 0.95,
-        "privacy_budget": 0.7
-    }
+    try:
+        # Get new applications count
+        new_apps_service = get_new_applications_service()
+        new_app_count = new_apps_service.get_application_count()
+
+        # TODO: Get actual model metrics
+        return {
+            "local_records": 1234,
+            "new_applications": new_app_count,
+            "good_bad_ratio": "70:30",
+            "last_training": "2 days ago",
+            "local_auc": 0.94,
+            "global_round": 12,
+            "global_auc": 0.95,
+            "privacy_budget": 0.7
+        }
+    except Exception as e:
+        logger.error(f"Failed to get model status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/model/analytics")
 async def get_model_analytics():

@@ -52,6 +52,10 @@ FEATURE_COLS = [
 # Categorical columns that need encoding (only these 3 were encoded during training)
 CATEGORICAL_COLS = ['gender', 'marital_status', 'education']
 
+# String columns that should be converted to 0 (these were NULL in training data)
+# The model was trained with these as NULL/0, so we treat all string values as 0
+STRING_COLS_TO_ZERO = ['home_ownership', 'region', 'job_type', 'loan_purpose']
+
 
 class NeuralNetworkScoringService:
     """Neural Network-based credit scoring using trained model with proper preprocessing"""
@@ -139,7 +143,7 @@ class NeuralNetworkScoringService:
             
             # Select only feature columns in correct order
             X = df[FEATURE_COLS].copy()
-            
+
             # Apply label encoders ONLY to the 3 categorical columns that were encoded in training
             for col in CATEGORICAL_COLS:
                 if col in self.encoders:
@@ -155,7 +159,13 @@ class NeuralNetworkScoringService:
                     # This shouldn't happen if encoders are loaded correctly
                     logger.error(f"Missing encoder for {col}! This should not happen.")
                     X[col] = 0
-            
+
+            # Convert string columns to 0 (these were NULL in training data)
+            for col in STRING_COLS_TO_ZERO:
+                if col in X.columns:
+                    # Set all values to 0, as model was trained with NULL/0 for these
+                    X[col] = 0
+
             # Convert to numpy array
             X_array = X.values.astype(float)
             
@@ -183,36 +193,37 @@ class NeuralNetworkScoringService:
             if self.model is None:
                 if not self.load_model():
                     raise Exception("Failed to load model")
-            
+
             # Preprocess features
             X = self.preprocess_features(features)
-            
+
             # Make prediction - get default probability (force CPU execution)
             with tf.device('/CPU:0'):
                 p_default = float(self.model.predict(X, verbose=0)[0][0])
-            
+
             # Convert to Alternative Credit Score: 300 + 600 * (1 - p_default)
             alt_score = int(round(300 + 600 * (1 - p_default)))
-            
+
             # Clamp to valid range
             alt_score = max(300, min(900, alt_score))
-            
+
             # Determine risk band based on score
             if alt_score >= 750:
                 risk_band = "Low"
+            elif alt_score >= 650:
+                risk_band = "Medium"
+            else:
+                risk_band = "High"
+
+            logger.info(f"Scored application: score={alt_score}, band={risk_band}, p_default={p_default:.4f}")
+            return alt_score, risk_band, p_default
+
         except Exception as e:
             logger.error(f"Error predicting score: {e}")
             import traceback
             traceback.print_exc()
             # Return conservative fallback values (high default probability = low score)
-            return 400, "High", 0.83  # 300 + 600 * (1 - 0.83) = ~402nd, p_default
-            
-        except Exception as e:
-            logger.error(f"Error predicting score: {e}")
-            import traceback
-            traceback.print_exc()
-            # Return default safe values
-            return 600, "Medium", 0.5
+            return 400, "High", 0.83
     
     def get_model_info(self) -> Dict:
         """Get information about the currently loaded model"""

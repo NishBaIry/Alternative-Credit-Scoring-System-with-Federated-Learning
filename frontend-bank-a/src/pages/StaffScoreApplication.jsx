@@ -32,6 +32,8 @@ const StaffScoreApplication = () => {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [approvalAction, setApprovalAction] = useState(null); // 'approved' or 'rejected'
+  const [processingApproval, setProcessingApproval] = useState(false);
 
   // Fetch next customer ID for new customers
   useEffect(() => {
@@ -183,12 +185,63 @@ const StaffScoreApplication = () => {
     }
   };
 
+  const handleApprove = async () => {
+    if (!formData.customerId) return;
+
+    setProcessingApproval(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/staff/applications/approve/${formData.customerId}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Approval failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setApprovalAction('approved');
+    } catch (err) {
+      setError(err.message);
+      console.error('Approval error:', err);
+    } finally {
+      setProcessingApproval(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!formData.customerId) return;
+
+    setProcessingApproval(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/staff/applications/reject/${formData.customerId}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Rejection failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setApprovalAction('rejected');
+    } catch (err) {
+      setError(err.message);
+      console.error('Rejection error:', err);
+    } finally {
+      setProcessingApproval(false);
+    }
+  };
+
   const handleReset = () => {
     setCustomerType('new');
     setSearchCustomerId('');
     setCustomerFound(null);
     setResult(null);
     setError(null);
+    setApprovalAction(null);
     setFormData({
       customerId: '',
       name: '',
@@ -523,19 +576,17 @@ const StaffScoreApplication = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                 <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Default Probability</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {(result.probability * 100).toFixed(2)}%
+                  <p className="text-sm text-gray-600 mb-1">Credit Score</p>
+                  <p className="text-3xl font-bold text-primary-600">
+                    {Math.round(result.score)}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">Range: 300-900</p>
                 </div>
 
                 <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-1">Risk Band</p>
-                  <p className={`text-2xl font-bold ${
-                    result.riskBand === 'Low' ? 'text-green-600' :
-                    result.riskBand === 'Medium' ? 'text-amber-600' : 'text-red-600'
-                  }`}>
-                    {result.riskBand}
+                  <p className="text-sm text-gray-600 mb-1">Default Probability</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {(result.probability * 100).toFixed(2)}%
                   </p>
                 </div>
 
@@ -550,14 +601,55 @@ const StaffScoreApplication = () => {
                 </div>
               </div>
 
-              {result.saved && (
-                <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                  <p className="text-sm text-green-800">
-                    ✓ Application saved successfully. Customer ID: <strong>{formData.customerId}</strong>
-                    {customerType === 'new' && ' (New customer created)'}
+              {result.saved && !approvalAction && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                  <p className="text-sm text-blue-800 mb-3">
+                    ✓ Application saved. Customer ID: <strong>{formData.customerId}</strong>
+                    {customerType === 'new' && ' (New customer)'}
                   </p>
-                  <p className="text-xs text-green-700 mt-1">
-                    This application will be included in the training dataset when FL training starts.
+                  <div className="flex gap-4 justify-center">
+                    <button
+                      onClick={handleApprove}
+                      disabled={processingApproval}
+                      className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {processingApproval ? 'Processing...' : '✓ Approve Loan'}
+                    </button>
+                    <button
+                      onClick={handleReject}
+                      disabled={processingApproval}
+                      className="px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                      {processingApproval ? 'Processing...' : '✗ Reject Loan'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {approvalAction === 'approved' && (
+                <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                  <p className="text-lg text-green-800 font-semibold mb-2">
+                    ✓ Loan Approved
+                  </p>
+                  <p className="text-sm text-green-700">
+                    Customer ID: <strong>{formData.customerId}</strong> has been approved for a loan of ₹{formData.loanAmount}.
+                  </p>
+                  <p className="text-xs text-green-600 mt-2">
+                    This application will be merged into the bank database when FL training starts.
+                  </p>
+                </div>
+              )}
+
+              {approvalAction === 'rejected' && (
+                <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                  <p className="text-lg text-red-800 font-semibold mb-2">
+                    ✗ Loan Rejected
+                  </p>
+                  <p className="text-sm text-red-700">
+                    Customer ID: <strong>{formData.customerId}</strong> loan application has been rejected.
+                  </p>
+                  <p className="text-xs text-red-600 mt-2">
+                    The rejection status will be recorded in the system.
                   </p>
                 </div>
               )}
