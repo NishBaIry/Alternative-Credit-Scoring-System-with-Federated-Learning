@@ -1,15 +1,26 @@
-// StaffModelTraining.jsx
-// Controls local model training and FL participation for this bank.
-// Implements: Train → Upload to Server → Poll for New Model → Auto-Download
-// Shows real-time FL status and automatic model updates.
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { motion } from 'framer-motion';
+import {
+  Brain,
+  Activity,
+  Download,
+  RefreshCw,
+  Play,
+  Pause,
+  Server,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Zap,
+  Upload,
+  Users
+} from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000';
 
 const StaffModelTraining = () => {
   // Training state
-  const [trainingStatus, setTrainingStatus] = useState('idle'); // idle, training, completed, error
+  const [trainingStatus, setTrainingStatus] = useState('idle');
   const [trainingOutput, setTrainingOutput] = useState('');
   
   // FL status state
@@ -104,7 +115,6 @@ const StaffModelTraining = () => {
         await fetchLocalModelInfo();
         await fetchFLStatus();
         
-        // Show success notification
         setTrainingOutput(prev => 
           prev + `\n\n✅ NEW MODEL ACTIVATED (Round ${data.round})\nSize: ${data.size_mb.toFixed(2)} MB`
         );
@@ -126,7 +136,6 @@ const StaffModelTraining = () => {
         
         if (data.has_new_model) {
           setModelUpdateAvailable(true);
-          // Auto-download new model
           await downloadAndActivateModel();
         }
         
@@ -145,7 +154,6 @@ const StaffModelTraining = () => {
     setIsPolling(true);
     console.log('Started polling for model updates...');
     
-    // Poll every 5 seconds
     pollIntervalRef.current = setInterval(async () => {
       await checkForModelUpdate();
       await fetchFLStatus();
@@ -201,10 +209,8 @@ const StaffModelTraining = () => {
           `Output:\n${data.output || 'No output'}`
         );
 
-        // Start polling for aggregated model
         startPolling();
 
-        // Refresh status and application count
         await fetchFLStatus();
         await fetchLocalModelInfo();
         await fetchNewApplicationsCount();
@@ -253,7 +259,6 @@ const StaffModelTraining = () => {
     fetchAvailableModels();
     fetchNewApplicationsCount();
 
-    // Cleanup on unmount
     return () => {
       stopPolling();
     };
@@ -262,51 +267,76 @@ const StaffModelTraining = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Model Training & Federated Learning</h1>
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-3xl font-bold mb-8 text-gray-900"
+        >
+          Model Training & Federated Learning
+        </motion.h1>
         
         {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-            <strong>Error:</strong> {error}
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-start gap-3"
+          >
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-semibold">Error:</strong> {error}
+            </div>
+          </motion.div>
         )}
 
         <div className="grid gap-6">
           {/* FL Server Status */}
-          <div className="card bg-white rounded-lg shadow p-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.5 }}
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200"
+          >
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">FL Server Status</h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <Server className="w-5 h-5 text-blue-600" />
+                </div>
+                <h2 className="text-xl font-semibold text-gray-900">FL Server Status</h2>
+              </div>
+              <div className="flex items-center gap-3">
                 {isPolling && (
-                  <span className="text-sm text-green-600 flex items-center gap-1">
-                    <span className="animate-pulse">●</span> Listening for updates
+                  <span className="text-sm text-green-600 flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-full">
+                    <Activity className="w-4 h-4 animate-pulse" />
+                    <span>Listening for updates</span>
                   </span>
                 )}
                 <button 
                   onClick={fetchFLStatus}
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium"
                 >
-                  Refresh
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Refresh</span>
                 </button>
               </div>
             </div>
             
             {flStatus ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Status</p>
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-600 mb-1 font-medium">Status</p>
                   <p className="text-xl font-bold text-green-600">{flStatus.status}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Current Round</p>
-                  <p className="text-xl font-bold">{flStatus.current_round}</p>
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-600 mb-1 font-medium">Current Round</p>
+                  <p className="text-xl font-bold text-gray-900">{flStatus.current_round}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Pending Banks</p>
-                  <p className="text-xl font-bold">{flStatus.clients_connected}/{flStatus.aggregation_threshold}</p>
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-600 mb-1 font-medium">Pending Banks</p>
+                  <p className="text-xl font-bold text-gray-900">{flStatus.clients_connected}/{flStatus.aggregation_threshold}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Total Aggregations</p>
-                  <p className="text-xl font-bold">{flStatus.total_aggregations}</p>
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-600 mb-1 font-medium">Total Aggregations</p>
+                  <p className="text-xl font-bold text-gray-900">{flStatus.total_aggregations}</p>
                 </div>
               </div>
             ) : (
@@ -314,30 +344,40 @@ const StaffModelTraining = () => {
             )}
             
             {flStatus?.pending_updates?.length > 0 && (
-              <div className="mt-4 pt-4 border-t">
-                <p className="text-sm text-gray-600">Waiting for banks:</p>
-                <div className="flex gap-2 mt-2">
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-600 font-medium mb-2">Waiting for banks:</p>
+                <div className="flex gap-2 flex-wrap">
                   {flStatus.pending_updates.map((bank, i) => (
-                    <span key={i} className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm">
+                    <span key={i} className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
                       {bank}
                     </span>
                   ))}
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
 
           {/* Local Model Info */}
-          <div className="card bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Local Model</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                <Brain className="w-5 h-5 text-purple-600" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900">Local Model</h2>
+            </div>
             {localModelInfo ? (
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Current Round</p>
-                  <p className="text-2xl font-bold text-primary-600">{localModelInfo.local_round}</p>
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-600 mb-1 font-medium">Current Round</p>
+                  <p className="text-2xl font-bold text-purple-600">{localModelInfo.local_round}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Training Status</p>
+                <div className="p-4 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-600 mb-1 font-medium">Training Status</p>
                   <p className="text-2xl font-bold">
                     {localModelInfo.training_in_progress ? (
                       <span className="text-yellow-600">In Progress</span>
@@ -348,13 +388,13 @@ const StaffModelTraining = () => {
                 </div>
                 {localModelInfo.active_model && (
                   <>
-                    <div>
-                      <p className="text-sm text-gray-600">Active Model Size</p>
-                      <p className="text-lg font-semibold">{localModelInfo.active_model.size_mb.toFixed(2)} MB</p>
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <p className="text-sm text-gray-600 mb-1 font-medium">Active Model Size</p>
+                      <p className="text-lg font-semibold text-gray-900">{localModelInfo.active_model.size_mb.toFixed(2)} MB</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Last Updated</p>
-                      <p className="text-lg font-semibold">
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <p className="text-sm text-gray-600 mb-1 font-medium">Last Updated</p>
+                      <p className="text-lg font-semibold text-gray-900">
                         {new Date(localModelInfo.active_model.modified).toLocaleString()}
                       </p>
                     </div>
@@ -364,19 +404,24 @@ const StaffModelTraining = () => {
             ) : (
               <p className="text-gray-500">Loading model info...</p>
             )}
-          </div>
+          </motion.div>
 
           {/* Model Selector */}
           {availableModels.length > 0 && (
-            <div className="card bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Switch Active Model</h2>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+              className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200"
+            >
+              <h2 className="text-xl font-semibold mb-4 text-gray-900">Switch Active Model</h2>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium mb-2">
-                    Active: <span className="text-primary-600 font-semibold">{activeModelName}</span>
+                  <label className="block text-sm font-semibold mb-2 text-gray-700">
+                    Active: <span className="text-purple-600">{activeModelName}</span>
                   </label>
                   <select 
-                    className="input-field"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
                   >
@@ -391,61 +436,96 @@ const StaffModelTraining = () => {
                 <button
                   onClick={() => selectedModel && handleSwitchModel(selectedModel)}
                   disabled={!selectedModel}
-                  className="btn-primary mt-6"
+                  className="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                   Switch Model
                 </button>
               </div>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-gray-500 mt-3">
                 Available models: {availableModels.length} | Switch to use a different FL round model for scoring
               </p>
-            </div>
+            </motion.div>
           )}
 
           {/* New Model Alert */}
           {modelUpdateAvailable && (
-            <div className="card bg-green-50 border-2 border-green-400 rounded-lg shadow p-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="bg-green-50 border-2 border-green-400 rounded-2xl shadow-sm p-6"
+            >
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-green-800">🎉 New Aggregated Model Available!</h3>
-                  <p className="text-green-700">A new global model has been created from federated learning.</p>
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Zap className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-green-800">New Aggregated Model Available!</h3>
+                    <p className="text-green-700">A new global model has been created from federated learning.</p>
+                  </div>
                 </div>
                 <button
                   onClick={handleManualDownload}
                   disabled={downloadingModel}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
                 >
-                  {downloadingModel ? 'Downloading...' : 'Download Now'}
+                  {downloadingModel ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Downloading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      <span>Download Now</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* New Applications Status */}
           {newApplicationsCount > 0 && (
-            <div className="card bg-blue-50 border-2 border-blue-400 rounded-lg shadow p-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="bg-blue-50 border-2 border-blue-400 rounded-2xl shadow-sm p-6"
+            >
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-blue-800">📋 New Applications Ready</h3>
-                  <p className="text-blue-700">
-                    {newApplicationsCount} new {newApplicationsCount === 1 ? 'application' : 'applications'} will be merged into training dataset when FL training starts.
-                  </p>
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-blue-800">New Applications Ready</h3>
+                    <p className="text-blue-700">
+                      {newApplicationsCount} new {newApplicationsCount === 1 ? 'application' : 'applications'} will be merged into training dataset when FL training starts.
+                    </p>
+                  </div>
                 </div>
-                <div className="text-center">
+                <div className="text-center ml-6">
                   <div className="text-4xl font-bold text-blue-600">{newApplicationsCount}</div>
-                  <div className="text-sm text-blue-600">Pending</div>
+                  <div className="text-sm text-blue-600 font-medium">Pending</div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Training Actions */}
-          <div className="card bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Training Actions</h2>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.5 }}
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200"
+          >
+            <h2 className="text-xl font-semibold mb-4 text-gray-900">Training Actions</h2>
             {newApplicationsCount > 0 && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
                 <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> Starting FL training will automatically merge {newApplicationsCount} new {newApplicationsCount === 1 ? 'application' : 'applications'} into the training dataset.
+                  <strong className="font-semibold">Note:</strong> Starting FL training will automatically merge {newApplicationsCount} new {newApplicationsCount === 1 ? 'application' : 'applications'} into the training dataset.
                 </p>
               </div>
             )}
@@ -454,33 +534,38 @@ const StaffModelTraining = () => {
                 <button
                   onClick={handleTrainLocal}
                   disabled={trainingStatus === 'training'}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 font-semibold flex items-center gap-2"
                 >
                   {trainingStatus === 'training' ? (
                     <>
-                      <span className="animate-spin inline-block mr-2">⟳</span>
-                      Training...
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Training...</span>
                     </>
                   ) : (
-                    '🚀 Start FL Training'
+                    <>
+                      <Play className="w-5 h-5" />
+                      <span>Start FL Training</span>
+                    </>
                   )}
                 </button>
                 
                 {isPolling && (
                   <button
                     onClick={stopPolling}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors flex items-center gap-2 font-medium"
                   >
-                    Stop Polling
+                    <Pause className="w-4 h-4" />
+                    <span>Stop Polling</span>
                   </button>
                 )}
                 
                 {!isPolling && trainingStatus === 'completed' && (
                   <button
                     onClick={startPolling}
-                    className="px-4 py-2 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                    className="px-4 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors flex items-center gap-2 font-medium"
                   >
-                    Resume Polling
+                    <Play className="w-4 h-4" />
+                    <span>Resume Polling</span>
                   </button>
                 )}
               </div>
@@ -489,52 +574,62 @@ const StaffModelTraining = () => {
                 Training will: Load local dataset → Fine-tune model → Upload weights to FL server → Wait for aggregation
               </p>
             </div>
-          </div>
+          </motion.div>
 
           {/* Training Output */}
           {trainingOutput && (
-            <div className="card bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Training Output</h2>
-              <pre className="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.5 }}
+              className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200"
+            >
+              <h2 className="text-xl font-semibold mb-4 text-gray-900">Training Output</h2>
+              <pre className="bg-gray-900 text-green-400 p-4 rounded-xl overflow-x-auto text-sm font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
                 {trainingOutput}
               </pre>
-            </div>
+            </motion.div>
           )}
 
           {/* How It Works */}
-          <div className="card bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">How Federated Learning Works</h2>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">1</span>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.5 }}
+            className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200"
+          >
+            <h2 className="text-xl font-semibold mb-6 text-gray-900">How Federated Learning Works</h2>
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <span className="flex-shrink-0 w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">1</span>
                 <div>
-                  <p className="font-semibold">Local Training</p>
-                  <p className="text-gray-600 text-sm">Your bank trains the model on its private data. Data never leaves your system.</p>
+                  <p className="font-semibold text-gray-900">Local Training</p>
+                  <p className="text-gray-600 text-sm mt-1">Your bank trains the model on its private data. Data never leaves your system.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">2</span>
+              <div className="flex items-start gap-4">
+                <span className="flex-shrink-0 w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">2</span>
                 <div>
-                  <p className="font-semibold">Upload Weights</p>
-                  <p className="text-gray-600 text-sm">Only model weights (not data) are sent to the FL server.</p>
+                  <p className="font-semibold text-gray-900">Upload Weights</p>
+                  <p className="text-gray-600 text-sm mt-1">Only model weights (not data) are sent to the FL server.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">3</span>
+              <div className="flex items-start gap-4">
+                <span className="flex-shrink-0 w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">3</span>
                 <div>
-                  <p className="font-semibold">FedAvg Aggregation</p>
-                  <p className="text-gray-600 text-sm">Server combines weights from all banks using weighted averaging.</p>
+                  <p className="font-semibold text-gray-900">FedAvg Aggregation</p>
+                  <p className="text-gray-600 text-sm mt-1">Server combines weights from all banks using weighted averaging.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-bold">4</span>
+              <div className="flex items-start gap-4">
+                <span className="flex-shrink-0 w-10 h-10 bg-green-100 text-green-600 rounded-xl flex items-center justify-center font-bold text-lg">4</span>
                 <div>
-                  <p className="font-semibold">Auto-Update</p>
-                  <p className="text-gray-600 text-sm">New global model is automatically downloaded and activated when ready.</p>
+                  <p className="font-semibold text-gray-900">Auto-Update</p>
+                  <p className="text-gray-600 text-sm mt-1">New global model is automatically downloaded and activated when ready.</p>
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>
