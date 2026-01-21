@@ -12,7 +12,7 @@ import {
   BarChart3
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8000'; // Placeholder for demo
+import { API_BASE_URL } from '../lib/constants';
 
 const StaffDashboard = () => {
   const [metrics, setMetrics] = useState({

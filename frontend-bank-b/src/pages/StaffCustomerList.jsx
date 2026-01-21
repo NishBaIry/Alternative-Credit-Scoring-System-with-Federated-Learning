@@ -1,72 +1,272 @@
-// StaffCustomerList.jsx
-// Table view of customers for this bank only, using CustomerTable component.
-// Columns: customer_id, alias, age, region, latest score, risk band.
-// Supports basic search/filter by id or risk band (front-end only is fine).
-// Row click routes to StaffCustomerDetail with that customer's id.
-// Calls /staff/customers to fetch paginated data from backend.
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { 
+  Users, 
+  Search, 
+  X, 
+  ChevronLeft, 
+  ChevronRight,
+  Shield,
+  Loader2
+} from 'lucide-react';
+
+import { API_BASE_URL } from '../lib/constants';
+
+const API_URL = API_BASE_URL;
 
 const StaffCustomerList = () => {
   const navigate = useNavigate();
+  
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [limit] = useState(100);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
 
-  const customers = [
-    { id: 'C001', name: 'John Doe', score: 742, riskBand: 'Low', age: 28, region: 'Mumbai' },
-    { id: 'C002', name: 'Jane Smith', score: 620, riskBand: 'Medium', age: 35, region: 'Delhi' },
-    { id: 'C003', name: 'Mike Johnson', score: 810, riskBand: 'Low', age: 42, region: 'Bangalore' },
-  ];
+  useEffect(() => {
+    if (!searchQuery) {
+      fetchCustomers();
+    }
+  }, [page]);
+
+  useEffect(() => {
+    if (searchQuery) {
+      handleSearch();
+    } else {
+      fetchCustomers();
+    }
+  }, [searchQuery]);
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/staff/customers?skip=${page * limit}&limit=${limit}`);
+      const data = await response.json();
+      setCustomers(data.customers || []);
+      setTotal(data.total || 0);
+    } catch (error) {
+      console.error('Failed to fetch customers:', error);
+      setCustomers([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      fetchCustomers();
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const response = await fetch(`${API_URL}/api/staff/customers/${searchQuery.trim()}`);
+      const data = await response.json();
+      if (data.customer) {
+        setCustomers([data.customer]);
+        setTotal(1);
+      } else {
+        setCustomers([]);
+        setTotal(0);
+      }
+    } catch (error) {
+      console.error('Failed to search customer:', error);
+      setCustomers([]);
+      setTotal(0);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setPage(0);
+    fetchCustomers();
+  };
+
+  const handleViewCustomer = (customerId) => {
+    navigate(`/staff/customers/${customerId}`);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Customer List</h1>
-        
-        <div className="card">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4">Customer ID</th>
-                  <th className="text-left py-3 px-4">Name</th>
-                  <th className="text-left py-3 px-4">Score</th>
-                  <th className="text-left py-3 px-4">Risk Band</th>
-                  <th className="text-left py-3 px-4">Age</th>
-                  <th className="text-left py-3 px-4">Region</th>
-                  <th className="text-left py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((customer) => (
-                  <tr key={customer.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4">{customer.id}</td>
-                    <td className="py-3 px-4">{customer.name}</td>
-                    <td className="py-3 px-4 font-semibold">{customer.score}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-sm ${
-                        customer.riskBand === 'Low' ? 'bg-green-100 text-green-800' :
-                        customer.riskBand === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {customer.riskBand}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">{customer.age}</td>
-                    <td className="py-3 px-4">{customer.region}</td>
-                    <td className="py-3 px-4">
-                      <button
-                        onClick={() => navigate(`/staff/customers/${customer.id}`)}
-                        className="text-primary-600 hover:underline"
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl flex items-center justify-center">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Manage Accounts</h1>
+                <p className="text-sm text-gray-500">View and manage customer accounts</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-purple-100 rounded-xl">
+              <Users className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-semibold text-purple-900">
+                Total: {total} customers
+              </span>
+            </div>
           </div>
         </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Search Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm mb-6"
+        >
+          <div className="flex gap-4">
+            <div className="flex-1 relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Search className="w-5 h-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by Customer ID (e.g., 00000001)"
+                className="w-full pl-12 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 text-gray-900"
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              {searchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-200 rounded-lg transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={handleSearch}
+              disabled={searching || !searchQuery.trim()}
+              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center gap-2"
+            >
+              {searching ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Searching...</span>
+                </>
+              ) : (
+                <>
+                  <Search className="w-5 h-5" />
+                  <span>Search</span>
+                </>
+              )}
+            </button>
+          </div>
+          {searchQuery && customers.length === 0 && !loading && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2"
+            >
+              <X className="w-4 h-4 text-red-600" />
+              <span className="text-sm text-red-600 font-medium">
+                No customer found with ID "{searchQuery}"
+              </span>
+            </motion.div>
+          )}
+        </motion.div>
+
+        {loading ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-white rounded-2xl p-12 border border-gray-200 shadow-sm text-center"
+          >
+            <Loader2 className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
+            <div className="text-gray-600 font-medium">Loading customers...</div>
+          </motion.div>
+        ) : (
+          <>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Customer ID</th>
+                      <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Name</th>
+                      <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customers.map((customer, index) => (
+                      <motion.tr
+                        key={customer.customer_id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05, duration: 0.3 }}
+                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="py-4 px-6 font-mono text-sm text-gray-900 font-medium">
+                          {customer.customer_id}
+                        </td>
+                        <td className="py-4 px-6 text-gray-700">
+                          {customer.name || 'NA'}
+                        </td>
+                        <td className="py-4 px-6">
+                          <button
+                            onClick={() => handleViewCustomer(customer.customer_id)}
+                            className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium transition-colors group"
+                          >
+                            <span>View</span>
+                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </button>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+            
+            {!searchQuery && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4, duration: 0.5 }}
+                className="mt-6 flex justify-between items-center"
+              >
+                <button
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                  <span>Previous</span>
+                </button>
+                <span className="text-sm font-medium text-gray-600 bg-white px-6 py-3 rounded-xl border border-gray-200">
+                  Page {page + 1} of {Math.ceil(total / limit)}
+                </span>
+                <button
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={(page + 1) * limit >= total}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 hover:shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </motion.div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

@@ -2,9 +2,9 @@
 // Thin wrapper around fetch/axios for API calls to backend.
 // Automatically attaches auth token and selected bank id to requests.
 // Provides helpers like get('/client/me/score') and post('/staff/model/train').
-// If backend base URL changes, only update it here.
+// API URL is loaded from centralized constants.
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from './constants';
 
 export const apiClient = async (endpoint, options = {}) => {
   const token = localStorage.getItem('authToken');

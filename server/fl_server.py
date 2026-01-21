@@ -182,8 +182,9 @@ def evaluate_model_accuracy(model, dataset_path):
         # Load validation data
         df = pd.read_csv(dataset_path)
         
-        # Remove authentication and ID columns
-        remove_cols = ['customer_id', 'password']
+        # Remove authentication, ID, and non-feature columns
+        remove_cols = ['customer_id', 'password', 'data_source', 'credit_score',
+                       'credit_score_original', 'good_borrower', 'alt_score']
         df = df.drop(columns=[col for col in remove_cols if col in df.columns])
         
         # Separate features and target
