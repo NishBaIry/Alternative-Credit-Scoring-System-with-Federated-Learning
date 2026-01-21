@@ -26,7 +26,7 @@ function App() {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               
-              {/* Bank A Staff Routes */}
+              {/* Bank B Staff Routes */}
               <Route path="/staff/login" element={<StaffLogin />} />
               <Route path="/staff/dashboard" element={<StaffDashboard />} />
               <Route path="/staff/customers" element={<StaffCustomerList />} />

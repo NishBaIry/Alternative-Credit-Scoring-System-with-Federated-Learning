@@ -9,7 +9,7 @@ const StaffLogin = () => {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
   const { login } = useAuthContext();
-  const BANK_NAME = 'Bank A'; // Placeholder for demo
+  const BANK_NAME = 'Bank B'; // Placeholder for demo
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -81,7 +81,7 @@ const StaffLogin = () => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 text-gray-900 placeholder-gray-400"
-                  placeholder="admin@banka.com"
+                  placeholder="admin@bankb.com"
                   required
                 />
               </div>

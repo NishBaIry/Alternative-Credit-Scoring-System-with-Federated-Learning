@@ -8,9 +8,9 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:80
 
 // Bank Configuration
 export const BANK_ID = import.meta.env.VITE_BANK_ID || 'bank_b';
-export const BANK_NAME = import.meta.env.VITE_BANK_NAME || 'Bank A';
+export const BANK_NAME = import.meta.env.VITE_BANK_NAME || 'Bank B';
 export const APP_TYPE = import.meta.env.VITE_APP_TYPE || 'staff';
-export const APP_TITLE = import.meta.env.VITE_APP_TITLE || 'CashFlow - Bank A Staff Portal';
+export const APP_TITLE = import.meta.env.VITE_APP_TITLE || 'CashFlow - Bank B Staff Portal';
 
 // Score Configuration
 export const SCORE_RANGES = {
