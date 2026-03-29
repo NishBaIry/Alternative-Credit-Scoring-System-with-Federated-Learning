@@ -213,18 +213,4 @@ pytest app/tests/
 - Docker containerization
 - CI/CD pipeline
 
-## 📄 License
 
-MIT License - See LICENSE file for details
-
-## 👥 Contributing
-
-Contributions welcome! Please read CONTRIBUTING.md first.
-
-## 🙏 Acknowledgments
-
-Built for demonstrating AI for Social Good principles in financial inclusion.
-
----
-
-**Note**: This is a demonstration project for hackathons/learning. For production use, additional security hardening, compliance reviews, and regulatory approvals are required.
